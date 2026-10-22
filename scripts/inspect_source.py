@@ -1,116 +1,77 @@
 
 import json
-from datetime import datetime, timezone
+import re
 from pathlib import Path
 
-import requests
+
+ROOT = Path(__file__).resolve().parents[1]
+RAW_DIR = ROOT / "data" / "raw"
 
 
-SOURCE_URL = (
-    "https://api.siat.stat.uz/media/uploads/"
-    "sdmx/sdmx_data_1308.json"
-)
+def find_latest_snapshot() -> Path:
+    snapshots = sorted(
+        RAW_DIR.glob("official_prices_*.json"),
+        key=lambda path: path.name,
+    )
 
-RAW_DIR = Path("data/raw")
+    if not snapshots:
+        raise FileNotFoundError(
+            f"No source snapshots found in {RAW_DIR}"
+        )
+
+    return snapshots[-1]
 
 
 def main() -> None:
-    # 1. Extract: request the source data.
-    response = requests.get(
-        SOURCE_URL,
-        headers={
-            "User-Agent": "PricePulse/0.1 (educational data project)"
-        },
-        timeout=30,
-    )
+    raw_file = find_latest_snapshot()
 
-    # Raise an exception for HTTP errors such as 404 or 500.
-    response.raise_for_status()
+    with raw_file.open("r", encoding="utf-8") as file:
+        payload = json.load(file)
 
-    # 2. Check that the response contains valid JSON.
-    payload = response.json()
-
-    # 3. Save a timestamped snapshot of the original response.
-    fetched_at = datetime.now(timezone.utc).strftime(
-        "%Y%m%dT%H%M%SZ"
-    )
-
-    RAW_DIR.mkdir(parents=True, exist_ok=True)
-
-    output_path = RAW_DIR / f"official_prices_{fetched_at}.json"
-    output_path.write_bytes(response.content)
-
-    print(f"Download successful: {output_path}")
-    print(f"Response size: {len(response.content):,} bytes")
-    print(f"Top-level type: {type(payload).__name__}")
-
-    
-    # 4. Validate and inspect the dataset structure.
-    if not isinstance(payload, list):
-        raise TypeError(
-            f"Expected a list, got {type(payload).__name__}"
-        )
-
-    if len(payload) != 1:
-        raise ValueError(
-            f"Expected one dataset object, got {len(payload)}"
-        )
+    if (
+        not isinstance(payload, list)
+        or len(payload) != 1
+        or not isinstance(payload[0], dict)
+    ):
+        raise ValueError("Unexpected source JSON structure")
 
     dataset = payload[0]
-
-    if not isinstance(dataset, dict):
-        raise TypeError("The dataset object must be a dictionary")
-
     metadata = dataset.get("metadata")
     records = dataset.get("data")
 
     if not isinstance(metadata, list):
-        raise ValueError("Missing or invalid 'metadata' list")
+        raise ValueError("Invalid metadata")
 
     if not isinstance(records, list):
-        raise ValueError("Missing or invalid 'data' list")
+        raise ValueError("Invalid data records")
 
-    print("\n=== DATASET STRUCTURE ===")
-    print("Dataset keys:", list(dataset.keys()))
-    print("Metadata items:", len(metadata))
-    print("Data records:", len(records))
+    print(f"Snapshot: {raw_file.name}")
+    print(f"Metadata items: {len(metadata)}")
+    print(f"Product records: {len(records)}")
 
-    # 5. Read the metadata.
     print("\n=== METADATA ===")
 
-    for index, item in enumerate(metadata, start=1):
-        if not isinstance(item, dict):
-            print(f"{index}. Unexpected metadata type")
+    for item in metadata:
+        if isinstance(item, dict):
+            name = item.get("name_en") or item.get("name_uz", "?")
+            value = item.get("value_en") or item.get("value_uz", "?")
+            print(f"{name}: {value}")
+
+    print("\n=== PRODUCT SAMPLE ===")
+
+    for record in records[:3]:
+        if not isinstance(record, dict):
             continue
 
-        name = (
-            item.get("name_en")
-            or item.get("name_uz")
-            or "<unnamed>"
-        )
+        month_columns = [
+            key for key in record
+            if re.match(r"^\d{4}-", key)
+        ]
 
-        value = (
-            item.get("value_en")
-            or item.get("value_uz")
-            or "<no value>"
-        )
-
-        print(f"{index:02}. {name}: {value}")
-
-    # 6. Inspect a few actual records.
-    print("\n=== SAMPLE RECORDS ===")
-
-    sample_records = records[:3]
-
-    for index, record in enumerate(sample_records, start=1):
-        print(f"\nRecord {index}:")
         print(
-            json.dumps(
-                record,
-                indent=2,
-                ensure_ascii=False,
-                default=str,
-            )[:2000]
+            f"Code={record.get('Code')} | "
+            f"Product={record.get('Klassifikator_en')} | "
+            f"Monthly columns={len(month_columns)}"
         )
 
 
