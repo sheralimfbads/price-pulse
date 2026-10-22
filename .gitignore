@@ -5,3 +5,9 @@ __pycache__/
 
 data/raw/*
 !data/raw/.gitkeep
+
+# Generated Python and test files
+.pytest_cache/
+
+# Generated pipeline outputs
+data/processed/*.csv
