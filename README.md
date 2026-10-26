@@ -161,3 +161,47 @@ Each step should answer four questions: What did we build? Why do we need it? Ho
 ## Engineering documentation
 
 - [Historical snapshot replay](docs/SNAPSHOT_REPLAY.md)
+
+## Fresh clone setup
+
+1. Copy `.env.example` to `.env`.
+2. Replace the example database passwords with strong, private values.
+3. Start PostgreSQL and Airflow:
+
+    docker compose up -d --build db airflow
+
+4. Run the ingestion pipeline:
+
+    docker compose run --rm --build pipeline python scripts/run_pipeline.py
+
+The initial PostgreSQL volume is initialized using the SQL files mounted
+under `/docker-entrypoint-initdb.d/`. This includes the snapshot history,
+semantic-hash version, and replay-run audit tables.
+
+PostgreSQL runs those initialization scripts only when its data directory
+is first initialized. If you already have an older database volume, apply
+the additional migrations explicitly:
+
+    docker compose exec -T db psql -U postgres -d pricepulse -v ON_ERROR_STOP=1 < sql/008_create_snapshot_history.sql
+    docker compose exec -T db psql -U postgres -d pricepulse -v ON_ERROR_STOP=1 < sql/009_version_semantic_hash.sql
+    docker compose exec -T db psql -U postgres -d pricepulse -v ON_ERROR_STOP=1 < sql/010_create_snapshot_replay_runs.sql
+
+Do not delete an existing PostgreSQL volume just to rerun initialization.
+
+## Architecture and data flow
+
+The production pipeline extracts the official JSON source, preserves a
+timestamped raw snapshot, registers snapshot identity and history, then
+normalizes, audits, and cleans the observations before loading PostgreSQL.
+
+The analytics model separates product and month dimensions from monthly
+price facts. The audit schema tracks source snapshots and their
+observations. Historical replay uses a separate audit table and isolated
+output directories; it does not load replay results into live analytics.
+
+The manual `pricepulse_snapshot_replay` Airflow DAG accepts a registered
+snapshot filename through its run configuration. The scheduled
+`pricepulse_pipeline` remains responsible for current ingestion.
+
+The GitHub Actions workflow compiles the Python source and runs the
+automated test suite on pushes and pull requests.

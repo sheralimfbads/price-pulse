@@ -1,4 +1,3 @@
-
 import os
 import subprocess
 import sys
@@ -23,6 +22,23 @@ def run_script(script_name: str, *args: str) -> None:
     )
 
 
+def require_database_environment() -> None:
+    required = (
+        "DB_HOST",
+        "DB_PORT",
+        "DB_NAME",
+        "DB_USER",
+        "DB_PASSWORD",
+    )
+    missing = [name for name in required if not os.getenv(name)]
+
+    if missing:
+        raise RuntimeError(
+            "Missing required database variables: "
+            + ", ".join(missing)
+        )
+
+
 @dag(
     dag_id="pricepulse_pipeline",
     schedule="0 6 20 * *",
@@ -38,7 +54,6 @@ def run_script(script_name: str, *args: str) -> None:
 )
 def pricepulse_pipeline():
 
-
     @task
     def extract_source() -> str:
         script_path = PROJECT_ROOT / "scripts" / "extract_source.py"
@@ -51,25 +66,24 @@ def pricepulse_pipeline():
             text=True,
         )
 
-        # Keep the script's logs visible in Airflow task logs.
         if result.stderr:
             print(result.stderr, file=sys.stderr, end="")
 
         if result.stdout:
             print(result.stdout, end="")
 
-        markers = [
+        paths = [
             line.partition("=")[2]
             for line in result.stdout.splitlines()
             if line.startswith("SNAPSHOT_PATH=")
         ]
 
-        if len(markers) != 1:
+        if len(paths) != 1:
             raise RuntimeError(
                 "Extraction did not return exactly one snapshot path"
             )
 
-        snapshot_path = markers[0]
+        snapshot_path = paths[0]
 
         if not Path(snapshot_path).is_file():
             raise FileNotFoundError(
@@ -78,9 +92,16 @@ def pricepulse_pipeline():
 
         return snapshot_path
 
+    @task
+    def register_snapshot_history(snapshot_path: str) -> None:
+        if not snapshot_path:
+            raise ValueError("Snapshot path is required for registration")
+
+        require_database_environment()
+        run_script("load_snapshot_history.py")
 
     @task
-    def normalize_source(snapshot_path: str):
+    def normalize_source(snapshot_path: str) -> None:
         run_script(
             "normalize_source.py",
             "--source",
@@ -88,54 +109,46 @@ def pricepulse_pipeline():
         )
 
     @task
-    def audit_data():
+    def audit_data() -> None:
         run_script("audit_data.py")
 
     @task
-    def clean_prices():
+    def clean_prices() -> None:
         run_script("clean_prices.py")
 
     @task
-    def run_tests():
+    def run_tests() -> None:
         subprocess.run(
-            [PYTHON, "-m", "pytest", "-q"],
+            [
+                PYTHON,
+                "-m",
+                "pytest",
+                "-q",
+                "-p",
+                "no:cacheprovider",
+            ],
             cwd=PROJECT_ROOT,
             check=True,
         )
 
     @task
-    def load_to_database():
-        required_variables = [
-            "DB_HOST",
-            "DB_NAME",
-            "DB_USER",
-            "DB_PASSWORD",
-        ]
-
-        missing = [
-            name
-            for name in required_variables
-            if not os.getenv(name)
-        ]
-
-        if missing:
-            raise RuntimeError(
-                "Missing required database variables: "
-                + ", ".join(missing)
-            )
-
+    def load_to_database() -> None:
+        require_database_environment()
         run_script("load_to_postgres.py")
 
-    # Defining the dependency graph does not run the scripts here.
-    # Airflow schedules and executes these tasks at runtime.
     snapshot_path = extract_source()
-    normalize = normalize_source(snapshot_path)
 
-    audit = audit_data()
-    clean = clean_prices()
+    # Registration and transformations use the same extracted snapshot.
+    history = register_snapshot_history(snapshot_path)
+    normalized = normalize_source(snapshot_path)
+
+    audited = audit_data()
+    cleaned = clean_prices()
     tests = run_tests()
     load = load_to_database()
 
-    normalize >> audit >> clean >> tests >> load
+    normalized >> audited >> cleaned >> tests >> load
+    history >> load
+
 
 pricepulse_pipeline()

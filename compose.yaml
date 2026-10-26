@@ -15,6 +15,9 @@ services:
       - ./docker/postgres/init/00_create_app_role.sh:/docker-entrypoint-initdb.d/00_create_app_role.sh:ro
       - ./sql/001_create_schema.sql:/docker-entrypoint-initdb.d/10_create_staging.sql:ro
       - ./sql/005_create_analytics_model.sql:/docker-entrypoint-initdb.d/20_create_analytics.sql:ro
+      - ./sql/008_create_snapshot_history.sql:/docker-entrypoint-initdb.d/30_create_snapshot_history.sql:ro
+      - ./sql/009_version_semantic_hash.sql:/docker-entrypoint-initdb.d/40_version_semantic_hash.sql:ro
+      - ./sql/010_create_snapshot_replay_runs.sql:/docker-entrypoint-initdb.d/50_create_snapshot_replay_runs.sql:ro
       - ./docker/postgres/init/90_grant_app_privileges.sh:/docker-entrypoint-initdb.d/90_grant_app_privileges.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d pricepulse"]

@@ -1,4 +1,3 @@
-
 from pathlib import Path
 import subprocess
 import sys
@@ -15,6 +14,10 @@ PIPELINE_STEPS = [
         [PYTHON, "scripts/extract_source.py"],
     ),
     (
+        "Register source snapshot history",
+        [PYTHON, "scripts/load_snapshot_history.py"],
+    ),
+    (
         "Normalize source data",
         [PYTHON, "scripts/normalize_source.py"],
     ),
@@ -28,7 +31,7 @@ PIPELINE_STEPS = [
     ),
     (
         "Run automated tests",
-        [PYTHON, "-m", "pytest", "-q"],
+        [PYTHON, "-m", "pytest", "-q", "-p", "no:cacheprovider"],
     ),
     (
         "Load data into PostgreSQL",
@@ -56,31 +59,18 @@ def main() -> None:
         step_started = time.monotonic()
 
         try:
-            # The script's output remains visible in this terminal.
-            # check=True stops the pipeline on a non-zero exit code.
             subprocess.run(
                 command,
                 cwd=PROJECT_ROOT,
                 check=True,
             )
-
         except subprocess.CalledProcessError as exc:
-            print(
-                f"\nPIPELINE FAILED: {name}",
-                flush=True,
-            )
-            print(
-                f"Command exit code: {exc.returncode}",
-                flush=True,
-            )
+            print(f"\nPIPELINE FAILED: {name}", flush=True)
+            print(f"Command exit code: {exc.returncode}", flush=True)
             raise SystemExit(exc.returncode) from exc
 
         elapsed = time.monotonic() - step_started
-
-        print(
-            f"Step completed in {elapsed:.2f} seconds",
-            flush=True,
-        )
+        print(f"Step completed in {elapsed:.2f} seconds", flush=True)
 
     total_elapsed = time.monotonic() - pipeline_started
 

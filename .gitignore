@@ -25,5 +25,5 @@ airflow/logs/
 backups/
 
 data/processed/replays/
-data/raw/
 .vscode/
+data/raw/*.json
