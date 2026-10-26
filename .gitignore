@@ -11,3 +11,19 @@ data/raw/*
 
 # Generated pipeline outputs
 data/processed/*.csv
+
+.env
+.env.*
+!.env.example
+
+.pytest_cache/
+data/processed/*.csv
+
+airflow/logs/
+
+# Local database backups — never commit these
+backups/
+
+data/processed/replays/
+data/raw/
+.vscode/

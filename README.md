@@ -157,3 +157,7 @@ git diff --cached --name-only
 ## Learning philosophy
 
 Each step should answer four questions: What did we build? Why do we need it? How does it work? How do we test that it behaves correctly? Use the documentation as a memory aid, but revisit the code and re-run the experiments instead of treating this README as a substitute for practice.
+
+## Engineering documentation
+
+- [Historical snapshot replay](docs/SNAPSHOT_REPLAY.md)

@@ -1,4 +1,4 @@
-
+import argparse
 import csv
 import json
 import re
@@ -60,8 +60,36 @@ def parse_period(column_name: str) -> date | None:
         ) from exc
 
 
-def main() -> None:
-    raw_file = find_latest_snapshot()
+def main(
+    source_path: Path | None = None,
+    output_path: Path | None = None,
+) -> None:
+    raw_file = (
+        source_path.resolve()
+        if source_path is not None
+        else find_latest_snapshot()
+    )
+
+
+    output_file = (output_path or OUTPUT_FILE).resolve()
+
+    try:
+        output_file.relative_to(OUTPUT_DIR.resolve())
+    except ValueError as exc:
+        raise ValueError(
+            "Output path must be inside data/processed/"
+        ) from exc
+
+
+    if not raw_file.is_file():
+        raise FileNotFoundError(
+            f"Source snapshot not found: {raw_file}"
+        )
+
+    if raw_file.parent != RAW_DIR.resolve():
+        raise ValueError(
+            "The source snapshot must be inside data/raw/"
+        )
 
     # Recover the fetch timestamp from the snapshot filename.
     match = re.search(
@@ -144,12 +172,11 @@ def main() -> None:
             "Multiple source columns represent the same month"
         )
 
-    # Build a long-format CSV.
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # Write to a temporary file so a failed run does not
-    # replace an earlier successful output with a partial file.
-    temporary_file = OUTPUT_DIR / "official_prices_long.csv.tmp"
+    temporary_file = output_file.with_name(
+        f".{output_file.name}.tmp"
+    )
 
     row_count = 0
     missing_period_fields = 0
@@ -232,7 +259,7 @@ def main() -> None:
                     row_count += 1
 
         # Replace the previous output only after a successful write.
-        temporary_file.replace(OUTPUT_FILE)
+        temporary_file.replace(output_file)
 
     except Exception:
         temporary_file.unlink(missing_ok=True)
@@ -249,8 +276,25 @@ def main() -> None:
     print(f"Rows written: {row_count:,}")
     print(f"Missing period fields: {missing_period_fields:,}")
     print(f"Missing price values: {missing_price_values:,}")
-    print(f"Output file: {OUTPUT_FILE.relative_to(PROJECT_ROOT)}")
+    print(f"Output file: {output_file.relative_to(PROJECT_ROOT)}")
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(
+        description="Normalize an official price snapshot"
+    )
+
+    parser.add_argument(
+        "--source",
+        type=Path,
+        help="Exact raw JSON snapshot to process",
+    )
+
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Output CSV path inside data/processed/",
+    )
+
+    args = parser.parse_args()
+    main(args.source, args.output)

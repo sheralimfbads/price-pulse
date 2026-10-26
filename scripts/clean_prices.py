@@ -1,4 +1,6 @@
 
+import argparse
+
 from pathlib import Path
 
 import pandas as pd
@@ -110,14 +112,36 @@ def clean_price_data(df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
-def main() -> None:
-    if not INPUT_FILE.exists():
+def main(
+    input_path: Path | None = None,
+    output_path: Path | None = None,
+) -> None:
+    processed_dir = (
+        PROJECT_ROOT / "data" / "processed"
+    ).resolve()
+
+    input_file = (input_path or INPUT_FILE).resolve()
+    output_file = (output_path or OUTPUT_FILE).resolve()
+
+    # Keep replay inputs and outputs inside data/processed/.
+    for path in (input_file, output_file):
+        try:
+            path.relative_to(processed_dir)
+        except ValueError as exc:
+            raise ValueError(
+                "Input and output paths must be inside data/processed/"
+            ) from exc
+
+    if not input_file.is_file():
         raise FileNotFoundError(
-            f"Input dataset not found: {INPUT_FILE}"
+            f"Input dataset not found: {input_file}"
         )
 
+    # Read the actual requested input.
+    # Keep product codes as strings to preserve leading zeros,
+    # e.g. "0050" rather than 50.
     df = pd.read_csv(
-        INPUT_FILE,
+        input_file,
         dtype={
             "product_code": "string",
             "period": "string",
@@ -127,9 +151,8 @@ def main() -> None:
     cleaned = clean_price_data(df)
 
     # Write to a temporary file before replacing the output.
-    OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-
-    temporary_file = OUTPUT_FILE.with_suffix(".csv.tmp")
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    temporary_file = output_file.with_suffix(".csv.tmp")
 
     try:
         cleaned.to_csv(
@@ -138,13 +161,14 @@ def main() -> None:
             na_rep="",
         )
 
-        temporary_file.replace(OUTPUT_FILE)
+        temporary_file.replace(output_file)
 
     except Exception:
         temporary_file.unlink(missing_ok=True)
         raise
 
     print("=== CLEANING SUMMARY ===")
+    print(f"Input file: {input_file.relative_to(PROJECT_ROOT)}")
     print(f"Input rows: {len(df):,}")
     print(f"Output rows: {len(cleaned):,}")
 
@@ -161,8 +185,16 @@ def main() -> None:
         int(cleaned["average_price_uzs_per_kg"].isna().sum()),
     )
 
-    print(f"\nOutput file: {OUTPUT_FILE.relative_to(PROJECT_ROOT)}")
+    print(f"\nOutput file: {output_file.relative_to(PROJECT_ROOT)}")
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(
+        description="Clean normalized price data"
+    )
+
+    parser.add_argument("--input", type=Path, default=INPUT_FILE)
+    parser.add_argument("--output", type=Path, default=OUTPUT_FILE)
+
+    args = parser.parse_args()
+    main(args.input, args.output)

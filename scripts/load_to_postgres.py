@@ -1,4 +1,7 @@
 
+import os
+import sys
+
 from getpass import getpass
 from pathlib import Path
 
@@ -15,10 +18,10 @@ INPUT_FILE = (
 )
 
 DB_CONFIG = {
-    "host": "localhost",
-    "port": 5432,
-    "dbname": "pricepulse",
-    "user": "pricepulse_dev",
+    "host": os.getenv("DB_HOST", "localhost"),
+    "port": int(os.getenv("DB_PORT", "5432")),
+    "dbname": os.getenv("DB_NAME", "pricepulse"),
+    "user": os.getenv("DB_USER", "pricepulse_dev"),
 }
 
 COLUMNS = """
@@ -157,10 +160,17 @@ def load_data() -> dict:
             f"Input CSV not found: {INPUT_FILE}"
         )
 
-    password = getpass(
-        f"Password for PostgreSQL user "
-        f"{DB_CONFIG['user']}: "
-    )
+    password = os.getenv("DB_PASSWORD")
+
+    if not password:
+        if not sys.stdin.isatty():
+            raise RuntimeError(
+                "DB_PASSWORD must be set for non-interactive execution."
+            )
+
+        password = getpass(
+            f"Password for PostgreSQL user {DB_CONFIG['user']}: "
+        )
 
     # The connection context commits on success and rolls back
     # if an exception escapes the block.

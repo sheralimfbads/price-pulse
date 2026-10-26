@@ -1,4 +1,4 @@
-
+import argparse
 from pathlib import Path
 import sys
 
@@ -25,15 +25,16 @@ REQUIRED_COLUMNS = {
 }
 
 
-def main() -> None:
-    if not DATA_FILE.exists():
+def main(input_path: Path | None = None) -> None:
+    data_file = (input_path or DATA_FILE).resolve()
+    if not data_file.is_file():
         raise FileNotFoundError(
-            f"Processed dataset not found: {DATA_FILE}"
+            f"Processed dataset not found: {data_file}"
         )
 
     # Preserve product identifiers such as "001".
     df = pd.read_csv(
-        DATA_FILE,
+        data_file,
         dtype={
             "product_code": "string",
             "period": "string",
@@ -275,4 +276,16 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(
+        description="Audit a normalized price dataset"
+    )
+
+    parser.add_argument(
+        "--input",
+        type=Path,
+        default=DATA_FILE,
+        help="CSV dataset to audit",
+    )
+
+    args = parser.parse_args()
+    main(args.input)

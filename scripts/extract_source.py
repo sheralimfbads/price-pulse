@@ -93,6 +93,7 @@ def main() -> None:
         len(records),
         len(metadata),
     )
+    print(f"SNAPSHOT_PATH={output_path.resolve()}", flush=True)
 
 
 if __name__ == "__main__":
