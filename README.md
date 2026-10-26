@@ -1,207 +1,216 @@
-# PricePulse Uzbekistan
+# PricePulse — Uzbekistan Price Data Engineering
 
-A learning-focused data engineering project that builds a reproducible pipeline around official monthly average prices for selected goods in Uzbekistan.
+PricePulse is a learning-focused data engineering portfolio project built around official monthly average prices for selected goods in Uzbekistan. It is developed as one evolving system: each added component addresses a real pipeline requirement and is documented and tested.
 
-PricePulse currently downloads a source JSON snapshot, normalizes its wide monthly data into a long-format CSV, audits and cleans the data, loads it into PostgreSQL, and models it for analytics using a small star schema.
+The project includes a Python ingestion and transformation pipeline, PostgreSQL staging and analytics models, source-snapshot history, deterministic historical replay, Docker Compose services, and Airflow orchestration.
 
-> **Project status:** The local Python + SQL pipeline and PostgreSQL model are working. This is an educational portfolio project, not yet a production service. Docker, Airflow, dbt, cloud deployment, and historical source-revision tracking are future milestones.
+## Project status
 
-## Why this project exists
+**Implemented and exercised locally:**
 
-Rather than building many disconnected tutorials, PricePulse grows one system step by step. Each new technology should solve a real limitation of the current version and be accompanied by tests and documentation.
+- Fetching and preserving timestamped raw JSON snapshots from the official source.
+- Registering snapshot identity and history, including semantic hashes.
+- Normalizing monthly source data to one row per product and month.
+- Auditing source data and cleaning analytical prices while preserving source values.
+- Loading data into PostgreSQL staging and a product/month star schema.
+- Running the current ingestion pipeline through Docker Compose and Airflow.
+- Replaying a registered historical source snapshot into an isolated output directory, with replay results recorded in the audit schema.
+- Running automated Python tests and GitHub Actions CI.
+
+This is still an educational portfolio project, not a production service. Cloud deployment, operational monitoring, production-grade alerting, and broader integration testing remain future work.
 
 ## Data source
 
-- Dataset: *Dynamics of average prices of some goods in markets and stores*.
-- Publisher: National Statistics Committee of the Republic of Uzbekistan.
-- Unit reported by the source: soums per kilogram.
-- Frequency: monthly.
-- Source endpoint: <https://api.siat.stat.uz/media/uploads/sdmx/sdmx_data_1308.json>
-- Statistics portal: <https://stat.uz/en/official-statistics/prices-and-indexes>
+- **Dataset:** *Dynamics of average prices of some goods in markets and stores*.
+- **Publisher:** National Statistics Committee of the Republic of Uzbekistan.
+- **Unit:** soums (UZS) per kilogram.
+- **Frequency:** monthly.
+- **JSON endpoint:** <https://api.siat.stat.uz/media/uploads/sdmx/sdmx_data_1308.json>
+- **Statistics portal:** <https://stat.uz/en/official-statistics/prices-and-indexes>
 
-The inspected source snapshot contained 41 product records and 69 months, from January 2021 through September 2026. The source's metadata includes duplicated publication/code fields with differing last-modified values; preserve and inspect source metadata rather than assuming every metadata entry is unique or consistent.
+The inspected snapshot fetched on 20 October 2026 contained 41 products and 69 monthly periods, covering January 2021 through September 2026. Counts below describe that snapshot and can change when the source is updated.
 
-## Current pipeline
+## Architecture and data flow
 
-Run the pipeline from the repository root, with the virtual environment activated:
-
-```bash
-source .venv/bin/activate
-python scripts/run_pipeline.py
+```text
+Official statistics JSON API
+            |
+            v
+Timestamped raw JSON snapshot
+            |
+            v
+Snapshot registry + semantic hashes
+            |
+            v
+Normalize -> Audit -> Clean -> Automated tests
+            |
+            v
+PostgreSQL staging tables
+            |
+            v
+Analytics star schema
+(dim_product, dim_month, fact_monthly_official_price)
 ```
 
-The runner executes these stages in order:
+The `audit` schema records source snapshots and their product/price observations. A historical replay validates a selected registered snapshot, processes it into a unique replay directory, records success or failure, and **does not load replay output into the live staging or analytics tables**.
 
-1. **Extract / inspect source** — retrieve the source and preserve a timestamped raw JSON snapshot. In the original implementation, `inspect_source.py` performed both download and inspection; a refactor may separate these into `extract_source.py` and a diagnostic-only `inspect_source.py`.
-2. **Normalize** — convert monthly columns into one row per product and month.
-3. **Audit** — validate dates, product identifiers, duplicate keys, price values, and timeline coverage.
-4. **Clean** — preserve source prices and create analytical prices plus an explicit `price_status`.
-5. **Test** — run `pytest`.
-6. **Load** — use Psycopg 3 to bulk-load CSV data into PostgreSQL and upsert staging and analytics tables in one transaction.
+Airflow has two distinct responsibilities:
 
-The loader prompts for the database password with `getpass`; credentials should not be hard-coded in Python or committed to Git.
+- `pricepulse_pipeline` runs the current ingestion pipeline.
+- `pricepulse_snapshot_replay` is a manually triggered DAG that replays a registered snapshot supplied through the DAG run configuration.
 
 ## Current observed data counts
 
-| Check | Expected / observed value |
+| Check | Observed value |
 |---|---:|
-| Product records | 41 |
+| Products | 41 |
 | Monthly periods | 69 |
-| Normalized product-month rows | 2,829 |
+| Normalized product-month observations | 2,829 |
 | `analytics.dim_product` | 41 |
 | `analytics.dim_month` | 69 |
 | `analytics.fact_monthly_official_price` | 2,829 |
-| Observed positive prices | 2,823 |
+| Positive observed prices | 2,823 |
 | Zero-marked unavailable prices | 6 |
 | Duplicate product-month keys | 0 |
 
-The six zeros came from the source JSON and were preserved by normalization. The current analytical rule maps these zeros to missing analytical prices while preserving the original values and marking them `zero_marked_unavailable`. This is an explicit project assumption based on the source's seasonal note, not a formally verified source encoding rule.
+### Zero-price handling
+
+Six observations in the inspected source snapshot had a price of zero. The pipeline preserves each original source value in `source_price_uzs_per_kg`, sets the analytical price to missing, and assigns `price_status = 'zero_marked_unavailable'`. The other 2,823 observations are marked `observed`.
+
+This treatment is a documented **project assumption**, not a claim that the publisher formally defines every zero as unavailable. Revisit the rule if authoritative source documentation clarifies the meaning of these values.
 
 ## Repository layout
 
 ```text
 price-pulse/
+├── airflow/       # Airflow DAGs and Airflow image configuration
 ├── data/
-│   ├── raw/                 # Local timestamped source snapshots (ignored by Git)
-│   └── processed/           # Generated normalized and analytical CSVs
-├── docs/                    # Project and design documentation
-├── scripts/
-│   ├── inspect_source.py
-│   ├── normalize_source.py
-│   ├── audit_data.py
-│   ├── clean_prices.py
-│   ├── investigate_zero_prices.py
-│   ├── load_to_postgres.py
-│   └── run_pipeline.py
-├── sql/
-│   ├── 001_create_schema.sql
-│   ├── 002_analytical_queries.sql
-│   ├── 003_query_plans.sql
-│   ├── 004_modeling_precheck.sql
-│   ├── 005_create_analytics_model.sql
-│   ├── 006_load_analytics_model.sql
-│   └── 007_verify_analytics_model.sql
-├── tests/
+│   ├── raw/       # Local timestamped source snapshots (ignored by Git)
+│   └── processed/ # Generated CSVs and isolated replay outputs
+├── docs/          # Project guide and snapshot replay documentation
+├── scripts/       # Extraction, normalization, audit, cleaning, loading, replay
+├── sql/           # Schema, analytics model, snapshot-history migrations, queries
+├── tests/         # Automated tests
+├── Dockerfile
 ├── requirements.txt
-└── .gitignore
+├── .env.example
+└── README.md
 ```
 
-This is the intended layout; file names may differ slightly if the extraction/inspection refactor is still in progress.
+Generated data, raw source snapshots, local environment files, virtual environments, and operational logs are intentionally excluded from Git. A fresh clone therefore needs to fetch a source snapshot before local replay can be performed.
 
-## Local setup
+## Run with Docker Compose
 
-The project was developed on Ubuntu with Python in a virtual environment and PostgreSQL 16. Your local versions may differ.
+Docker Compose is the main reproducible route for running the database and orchestrated pipeline.
+
+1. Create your local environment file and set private passwords. Do not commit `.env`:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Start PostgreSQL and Airflow:
+
+   ```bash
+   docker compose up -d --build db airflow
+   docker compose ps
+   ```
+
+3. Run the current ingestion pipeline in the pipeline container:
+
+   ```bash
+   docker compose run --rm --build pipeline python scripts/run_pipeline.py
+   ```
+
+The PostgreSQL image runs initialization SQL files under `/docker-entrypoint-initdb.d/` only when its data directory is first initialized. If you already have an older database volume that predates snapshot history and replay auditing, apply the migrations explicitly from the repository root:
+
+```bash
+docker compose exec -T db psql -U postgres -d pricepulse -v ON_ERROR_STOP=1 < sql/008_create_snapshot_history.sql
+docker compose exec -T db psql -U postgres -d pricepulse -v ON_ERROR_STOP=1 < sql/009_version_semantic_hash.sql
+docker compose exec -T db psql -U postgres -d pricepulse -v ON_ERROR_STOP=1 < sql/010_create_snapshot_replay_runs.sql
+```
+
+Do not delete an existing PostgreSQL volume just to rerun initialization. Database initialization scripts and migrations are different: initialization runs on a new data directory, while existing databases need explicit migrations when they lack the newer tables or columns.
+
+## Historical snapshot replay
+
+Replay requires both a raw snapshot file available under `data/raw/` and its snapshot registered in the database. Raw files are not committed to Git, so use a snapshot that exists in your local working copy.
+
+List local snapshots:
+
+```bash
+ls -1 data/raw/official_prices_*.json
+```
+
+Then pass the exact filename to the replay script:
+
+```bash
+docker compose run --rm --build pipeline \
+  python scripts/replay_snapshot.py \
+  --snapshot official_prices_YYYYMMDDTHHMMSSZ.json
+```
+
+Replace the example filename with an actual registered snapshot filename. Replay verifies the snapshot identity and recorded hashes/counts, normalizes, audits, cleans, runs tests, writes outputs under a unique directory beneath `data/processed/replays/`, and records the outcome in `audit.snapshot_replay_run`. A failed or unknown snapshot should be rejected and recorded as a failed replay; replay must not mutate live staging or analytics data.
+
+Further details: [`docs/SNAPSHOT_REPLAY.md`](docs/SNAPSHOT_REPLAY.md).
+
+## Airflow
+
+Start the services with the Docker Compose commands above, then open the Airflow UI using the host and port configured in your Compose setup. Avoid placing passwords or other secrets in DAG code or committed files.
+
+The scheduled `pricepulse_pipeline` DAG orchestrates current ingestion. The `pricepulse_snapshot_replay` DAG is for a deliberate replay of a chosen registered snapshot; provide the snapshot filename using the DAG's run configuration as described in [`docs/SNAPSHOT_REPLAY.md`](docs/SNAPSHOT_REPLAY.md).
+
+## Local Python workflow
+
+For individual transformation and audit work outside Docker, use a Python virtual environment:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install requests pandas pytest "psycopg[binary]"
-python -m pip freeze > requirements.txt
+python -m pip install -r requirements.txt
 ```
 
-Create the local PostgreSQL role and database once, if they do not already exist:
+The exact local workflow depends on whether PostgreSQL is available locally and how its credentials are configured. The full pipeline requires a reachable database; do not hard-code credentials in source files.
+
+Useful component commands from the repository root include:
 
 ```bash
-sudo -u postgres psql
-```
-
-Inside `psql`:
-
-```sql
-CREATE ROLE pricepulse_dev LOGIN;
-\password pricepulse_dev
-CREATE DATABASE pricepulse OWNER pricepulse_dev;
-\q
-```
-
-Apply the SQL files in order when setting up an empty database:
-
-```bash
-psql -h localhost -U pricepulse_dev -d pricepulse -v ON_ERROR_STOP=1 -f sql/001_create_schema.sql
-psql -h localhost -U pricepulse_dev -d pricepulse -v ON_ERROR_STOP=1 -f sql/005_create_analytics_model.sql
-```
-
-The numbered files `002`–`004` and `007` contain analytical queries, query-plan experiments, prechecks, and verification. `006` populates the model from staging, after the normalized/cleaned data has been imported or the Python loader is used. Follow the steps in [`docs/PROJECT_GUIDE.md`](docs/PROJECT_GUIDE.md) for the whole workflow.
-
-## Useful commands
-
-```bash
-# Inspect the newest local source snapshot
 python scripts/inspect_source.py
-
-# Run component scripts individually
 python scripts/normalize_source.py
 python scripts/audit_data.py
 python scripts/clean_prices.py
 python -m pytest -q
-python scripts/load_to_postgres.py
-
-# Run the complete local pipeline
-python scripts/run_pipeline.py
-
-# Check repository state before committing
-git status --short
-git diff --cached --stat
-git diff --cached --name-only
 ```
 
-## Important limitations / next milestones
+The script names describe their current roles; consult the script help or project guide before assuming an individual command downloads, loads, or otherwise changes data.
 
-- The six zero prices are treated as unavailable for analysis based on a documented project assumption; verify the source's semantics if authoritative metadata becomes available.
-- The analytics fact table stores the current value per product-month. The loader upserts changed values, so it does **not** preserve every revision of a previously published month. Raw snapshots are retained locally, but source-version history is not yet modeled in PostgreSQL.
-- The loader uses upserts and a transaction, but the pipeline is not yet a fully orchestrated production system. Scheduling, task retries, observability, reconciliation for removed source rows, and deployment remain future work.
-- The monthly `LAG(..., 12)` comparison assumes complete monthly rows for each product. For missing months, align observations by explicit dates instead of assuming twelve rows always means twelve calendar months.
-- Do not commit `.venv/`, passwords, `.env` files, database dumps, or large raw snapshots. See [`docs/GIT_WORKFLOW.md`](docs/GIT_WORKFLOW.md).
+## Tests and continuous integration
 
-## Learning philosophy
+Run the automated suite with:
 
-Each step should answer four questions: What did we build? Why do we need it? How does it work? How do we test that it behaves correctly? Use the documentation as a memory aid, but revisit the code and re-run the experiments instead of treating this README as a substitute for practice.
+```bash
+python -m pytest -q
+```
 
-## Engineering documentation
+The GitHub Actions workflow compiles Python source under `scripts/` and `tests/`, installs dependencies from `requirements.txt`, and runs the test suite on pushes and pull requests. A passing unit-test suite is useful evidence, but it does not by itself prove that every Docker, database, and Airflow integration path is production-ready.
 
+## Important design decisions and limitations
+
+- **Product identifiers stay strings.** Codes can contain leading zeroes and must not be converted to integers.
+- **The analytics fact table is a current product-month view.** The loader upserts values into this table. Historical values associated with registered raw snapshots are tracked separately in the audit snapshot-observation tables, rather than represented as multiple versions of the same product-month in the analytics fact table.
+- **Historical replay is isolated.** Replay results go to a separate output directory and replay-run audit record; they are not loaded into live analytics tables.
+- **Zero handling is an assumption.** The six source zeros are flagged as unavailable for analysis, while their original values are retained.
+- **Monthly comparisons need calendar alignment.** A `LAG(..., 12)` query assumes there is one row for every calendar month per product. For incomplete timelines, align by explicit dates rather than assuming twelve rows always equal twelve calendar months.
+- **Production operations are not complete.** Broader integration tests, alerting, monitoring, deployment, and operational runbooks remain opportunities for further development.
+- **Protect local data and credentials.** Never commit `.env`, passwords, database dumps, `.venv/`, generated data, or large raw snapshots. See [`docs/GIT_WORKFLOW.md`](docs/GIT_WORKFLOW.md).
+
+## Documentation
+
+- [Project guide](docs/PROJECT_GUIDE.md)
 - [Historical snapshot replay](docs/SNAPSHOT_REPLAY.md)
+- [Git workflow](docs/GIT_WORKFLOW.md)
 
-## Fresh clone setup
+## Learning approach
 
-1. Copy `.env.example` to `.env`.
-2. Replace the example database passwords with strong, private values.
-3. Start PostgreSQL and Airflow:
-
-    docker compose up -d --build db airflow
-
-4. Run the ingestion pipeline:
-
-    docker compose run --rm --build pipeline python scripts/run_pipeline.py
-
-The initial PostgreSQL volume is initialized using the SQL files mounted
-under `/docker-entrypoint-initdb.d/`. This includes the snapshot history,
-semantic-hash version, and replay-run audit tables.
-
-PostgreSQL runs those initialization scripts only when its data directory
-is first initialized. If you already have an older database volume, apply
-the additional migrations explicitly:
-
-    docker compose exec -T db psql -U postgres -d pricepulse -v ON_ERROR_STOP=1 < sql/008_create_snapshot_history.sql
-    docker compose exec -T db psql -U postgres -d pricepulse -v ON_ERROR_STOP=1 < sql/009_version_semantic_hash.sql
-    docker compose exec -T db psql -U postgres -d pricepulse -v ON_ERROR_STOP=1 < sql/010_create_snapshot_replay_runs.sql
-
-Do not delete an existing PostgreSQL volume just to rerun initialization.
-
-## Architecture and data flow
-
-The production pipeline extracts the official JSON source, preserves a
-timestamped raw snapshot, registers snapshot identity and history, then
-normalizes, audits, and cleans the observations before loading PostgreSQL.
-
-The analytics model separates product and month dimensions from monthly
-price facts. The audit schema tracks source snapshots and their
-observations. Historical replay uses a separate audit table and isolated
-output directories; it does not load replay results into live analytics.
-
-The manual `pricepulse_snapshot_replay` Airflow DAG accepts a registered
-snapshot filename through its run configuration. The scheduled
-`pricepulse_pipeline` remains responsible for current ingestion.
-
-The GitHub Actions workflow compiles the Python source and runs the
-automated test suite on pushes and pull requests.
+Each milestone should answer four questions: **What did we build? Why is it needed? How does it work? How do we know it behaves correctly?** The goal is not to accumulate technologies for their own sake, but to demonstrate a coherent, testable data system and explain its engineering trade-offs.
