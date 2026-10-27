@@ -586,3 +586,18 @@ class TestE2EApi:
         assert resp.status_code == 200
         assert resp.json()["database"] == "ready"
 
+    def test_health_alias_endpoint(self):
+        client = TestClient(app)
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        assert resp.json()["database"] == "ready"
+
+    def test_dashboard_head_and_get(self):
+        client = TestClient(app)
+        get_resp = client.get("/")
+        assert get_resp.status_code == 200
+        assert "PricePulse" in get_resp.text
+
+        head_resp = client.head("/")
+        assert head_resp.status_code == 200
+

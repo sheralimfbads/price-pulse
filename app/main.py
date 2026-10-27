@@ -109,6 +109,11 @@ def health_ready(conn=Depends(get_connection)) -> HealthReady:
     return HealthReady()
 
 
+@app.get("/health", response_model=HealthReady, tags=["health"], include_in_schema=False)
+def health_alias(conn=Depends(get_connection)) -> HealthReady:
+    return health_ready(conn=conn)
+
+
 @app.get("/api/v1/overview", response_model=Overview, tags=["analytics"])
 def get_overview(conn=Depends(get_connection)) -> Overview:
     with conn.cursor() as cur:
@@ -261,7 +266,7 @@ def get_latest_movers(
     )
 
 
-@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+@app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse, include_in_schema=False)
 def dashboard(request: Request):
     return templates.TemplateResponse(
         request=request,
