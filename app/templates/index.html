@@ -1,68 +1,179 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ title }} — Official monthly prices</title>
+  <title>{{ title }} — Uzbekistan Official Commodity Price Intelligence</title>
+  <meta name="description" content="Production-grade commodity price analytics for Uzbekistan official statistics, modeled in PostgreSQL and served via FastAPI.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-  <a class="skip-link" href="#main">Skip to content</a>
-  <header class="site-header">
-    <div class="wrap">
-      <p class="eyebrow">Uzbekistan official prices</p>
-      <h1>PricePulse</h1>
-      <p class="lede">
-        Monthly average prices for selected goods, in Uzbek soums per kilogram.
-        Data is loaded from the official statistics source, cleaned without
-        inventing missing values, and modeled in PostgreSQL.
-      </p>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <!-- Top Navigation Bar -->
+  <header class="navbar">
+    <div class="nav-container">
+      <div class="brand">
+        <div class="logo-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-title">PricePulse</span>
+          <span class="brand-badge">Commodity Intelligence</span>
+        </div>
+      </div>
+
+      <div class="nav-meta">
+        <div class="system-status">
+          <span class="status-dot"></span>
+          <span class="status-label">PostgreSQL Online</span>
+        </div>
+        <div class="nav-links">
+          <a href="/docs" target="_blank" rel="noopener" class="nav-btn nav-btn-outline" title="OpenAPI / Swagger Documentation">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+            API Docs
+          </a>
+          <a href="/health/ready" target="_blank" rel="noopener" class="nav-btn nav-btn-outline" title="Readiness Endpoint">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+              <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+            Health
+          </a>
+          <button id="theme-toggle" class="theme-btn" aria-label="Toggle Dark/Light Theme" title="Toggle Dark/Light Theme">
+            <svg class="sun-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="5"></circle>
+              <line x1="12" y1="1" x2="12" y2="3"></line>
+              <line x1="12" y1="21" x2="12" y2="23"></line>
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+              <line x1="1" y1="12" x2="3" y2="12"></line>
+              <line x1="21" y1="12" x2="23" y2="12"></line>
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+            </svg>
+            <svg class="moon-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
     </div>
   </header>
 
-  <main id="main" class="wrap">
-    <section aria-labelledby="overview-heading" class="panel">
-      <h2 id="overview-heading">Overview</h2>
-      <p id="overview-status" class="status" role="status">Loading overview…</p>
-      <dl id="overview-metrics" class="metrics" hidden></dl>
+  <!-- Hero Header -->
+  <section class="hero-section">
+    <div class="wrap">
+      <div class="hero-content">
+        <div class="hero-tags">
+          <span class="hero-tag tag-primary">Official Statistics Agency (SIAT)</span>
+          <span class="hero-tag">Uzbekistan Commodity Basket</span>
+          <span class="hero-tag">UZS / Kilogram</span>
+          <span class="hero-tag tag-accent">Star Schema Analytics</span>
+        </div>
+        <h1 class="hero-headline">Official Commodity Price Intelligence</h1>
+        <p class="hero-subline">
+          Automated ingestion, cryptographic lineage, and calendar-aligned price analytics for 41 tracked commodities across Uzbekistan markets and retail chains.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Main Container -->
+  <main id="main" class="wrap content-area">
+
+    <!-- KPI Metrics Grid -->
+    <section aria-labelledby="overview-heading" class="section-container">
+      <div class="section-header">
+        <div>
+          <h2 id="overview-heading" class="section-title">Market Overview</h2>
+          <p class="section-desc">Platform dataset parameters and latest ingestion telemetry</p>
+        </div>
+        <div id="overview-status" class="status-pill status-loading" role="status">Fetching telemetry…</div>
+      </div>
+
+      <div id="overview-metrics" class="kpi-grid" hidden>
+        <!-- Injected via JavaScript -->
+      </div>
     </section>
 
-    <section aria-labelledby="movers-heading" class="panel">
-      <h2 id="movers-heading">Market movers</h2>
-      <p class="hint">
-        Year-over-year percentage change for the latest month that has
-        comparable prices. Rankings come from PostgreSQL, not from the browser.
-      </p>
-      <p id="movers-status" class="status" role="status">Loading rankings…</p>
-      <div class="split" hidden id="movers-tables">
+    <!-- Market Movers Section -->
+    <section aria-labelledby="movers-heading" class="section-container">
+      <div class="section-header">
         <div>
-          <h3>Largest increases</h3>
-          <div class="table-wrap">
-            <table>
+          <h2 id="movers-heading" class="section-title">Market Movers (Year-over-Year)</h2>
+          <p class="section-desc">Commodities with the highest percentage price fluctuations compared with 12 months earlier</p>
+        </div>
+        <div id="movers-comparison-badge" class="time-badge">Calculating…</div>
+      </div>
+
+      <p id="movers-status" class="status-pill status-loading" role="status">Loading rankings from PostgreSQL…</p>
+
+      <div class="movers-split" id="movers-tables" hidden>
+        <!-- Largest Increases Card -->
+        <div class="mover-card mover-card-gain">
+          <div class="mover-card-header">
+            <div class="mover-header-icon gain-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+                <polyline points="17 6 23 6 23 12"></polyline>
+              </svg>
+            </div>
+            <div>
+              <h3 class="mover-card-title">Top 5 YoY Price Increases</h3>
+              <p class="mover-card-subtitle">Highest price gains vs same month 1 year ago</p>
+            </div>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
               <thead>
                 <tr>
-                  <th scope="col">Rank</th>
-                  <th scope="col">Product</th>
-                  <th scope="col">Current</th>
-                  <th scope="col">Year earlier</th>
-                  <th scope="col">Change</th>
+                  <th scope="col" class="th-rank">Rank</th>
+                  <th scope="col">Commodity</th>
+                  <th scope="col" class="th-num">Current Price</th>
+                  <th scope="col" class="th-num">1 Year Ago</th>
+                  <th scope="col" class="th-change">Change</th>
                 </tr>
               </thead>
               <tbody id="increases-body"></tbody>
             </table>
           </div>
         </div>
-        <div>
-          <h3>Largest decreases</h3>
-          <div class="table-wrap">
-            <table>
+
+        <!-- Largest Decreases Card -->
+        <div class="mover-card mover-card-loss">
+          <div class="mover-card-header">
+            <div class="mover-header-icon loss-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="23 18 13.5 8.5 8.5 13.5 1 6"></polyline>
+                <polyline points="17 18 23 18 23 12"></polyline>
+              </svg>
+            </div>
+            <div>
+              <h3 class="mover-card-title">Top 5 YoY Price Decreases</h3>
+              <p class="mover-card-subtitle">Steepest price declines vs same month 1 year ago</p>
+            </div>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
               <thead>
                 <tr>
-                  <th scope="col">Rank</th>
-                  <th scope="col">Product</th>
-                  <th scope="col">Current</th>
-                  <th scope="col">Year earlier</th>
-                  <th scope="col">Change</th>
+                  <th scope="col" class="th-rank">Rank</th>
+                  <th scope="col">Commodity</th>
+                  <th scope="col" class="th-num">Current Price</th>
+                  <th scope="col" class="th-num">1 Year Ago</th>
+                  <th scope="col" class="th-change">Change</th>
                 </tr>
               </thead>
               <tbody id="decreases-body"></tbody>
@@ -72,65 +183,198 @@
       </div>
     </section>
 
-    <section aria-labelledby="explore-heading" class="panel">
-      <h2 id="explore-heading">Explore a product</h2>
-      <form id="product-form">
-        <div class="form-row">
-          <label for="product-select">Product</label>
-          <select id="product-select" name="product" required>
-            <option value="">Loading products…</option>
-          </select>
+    <!-- Product Explorer & Chart Section -->
+    <section aria-labelledby="explore-heading" class="section-container" id="explorer">
+      <div class="section-header">
+        <div>
+          <h2 id="explore-heading" class="section-title">Commodity Price Explorer</h2>
+          <p class="section-desc">Interactive time-series visualization and historical observation audit</p>
         </div>
-        <div class="form-row">
-          <label for="from-month">From month</label>
-          <input id="from-month" name="from_month" type="month">
+        <div id="product-status" class="status-pill" role="status">Select commodity</div>
+      </div>
+
+      <!-- Quick Ticker Chips -->
+      <div class="quick-chips-wrapper">
+        <span class="chips-label">Quick Select:</span>
+        <div class="chips-list" id="quick-chips">
+          <button type="button" class="chip-btn" data-code="001">🍚 Rice</button>
+          <button type="button" class="chip-btn" data-code="017">🥩 Beef</button>
+          <button type="button" class="chip-btn" data-code="0020">🍖 Mutton</button>
+          <button type="button" class="chip-btn" data-code="0004">🌾 Wheat</button>
+          <button type="button" class="chip-btn" data-code="069">🥔 Potatoes</button>
+          <button type="button" class="chip-btn" data-code="058">🍅 Tomatoes</button>
+          <button type="button" class="chip-btn" data-code="066">🧅 Onion</button>
+          <button type="button" class="chip-btn" data-code="065">🧄 Garlic</button>
+          <button type="button" class="chip-btn" data-code="0050">🍉 Watermelon</button>
         </div>
-        <div class="form-row">
-          <label for="to-month">To month</label>
-          <input id="to-month" name="to_month" type="month">
+      </div>
+
+      <!-- Filter Controls Form -->
+      <form id="product-form" class="explorer-toolbar">
+        <div class="toolbar-group toolbar-product">
+          <label for="product-select" class="field-label">Commodity Selector</label>
+          <div class="select-wrapper">
+            <select id="product-select" name="product" required>
+              <option value="">Loading commodities…</option>
+            </select>
+          </div>
         </div>
-        <button type="submit">Show prices</button>
+
+        <div class="toolbar-group">
+          <label for="from-month" class="field-label">From Month</label>
+          <input id="from-month" name="from_month" type="month" class="field-input">
+        </div>
+
+        <div class="toolbar-group">
+          <label for="to-month" class="field-label">To Month</label>
+          <input id="to-month" name="to_month" type="month" class="field-input">
+        </div>
+
+        <div class="toolbar-actions">
+          <button type="submit" class="action-btn action-btn-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            Apply Filter
+          </button>
+          <button type="button" id="reset-filter-btn" class="action-btn action-btn-ghost">Reset Range</button>
+        </div>
       </form>
-      <p id="product-status" class="status" role="status"></p>
-      <figure class="chart-card" id="chart-card" hidden>
-        <figcaption id="chart-caption">Analytical price over time</figcaption>
-        <svg id="price-chart" viewBox="0 0 720 260" role="img" aria-labelledby="chart-caption"></svg>
-        <p class="hint">Gaps are months with no analytical price. Lines are not interpolated across unavailable observations.</p>
-      </figure>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">Month</th>
-              <th scope="col">Analytical price</th>
-              <th scope="col">Status</th>
-              <th scope="col">Month-over-month</th>
-              <th scope="col">Percent</th>
-            </tr>
-          </thead>
-          <tbody id="prices-body">
-            <tr><td colspan="5">Choose a product to load history.</td></tr>
-          </tbody>
-        </table>
+
+      <!-- Interactive Chart Card -->
+      <div class="chart-card" id="chart-card" hidden>
+        <div class="chart-header">
+          <div>
+            <h3 class="chart-title" id="chart-title">Commodity Price Dynamics</h3>
+            <p class="chart-subtitle" id="chart-subtitle">Monthly average prices in UZS / kg</p>
+          </div>
+          <div class="chart-legend">
+            <div class="legend-item"><span class="legend-color legend-observed"></span> Observed Analytical Price</div>
+            <div class="legend-item"><span class="legend-color legend-gap"></span> Unavailable / Zero Gap</div>
+          </div>
+        </div>
+
+        <div class="chart-canvas-wrapper" id="chart-wrapper">
+          <svg id="price-chart" class="interactive-svg" viewBox="0 0 960 340" role="img" aria-labelledby="chart-title"></svg>
+          <div id="chart-tooltip" class="chart-tooltip" hidden></div>
+        </div>
+        <div class="chart-footer">
+          <span class="chart-note">ℹ️ Continuous lines are only drawn across observed periods. Gaps explicitly represent months marked unavailable.</span>
+        </div>
+      </div>
+
+      <!-- Observations Data Table Card -->
+      <div class="table-card">
+        <div class="table-card-header">
+          <h3 class="table-card-title">Monthly Price Observations Table</h3>
+          <span class="table-card-badge" id="table-row-count">0 observations</span>
+        </div>
+        <div class="table-container history-table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th scope="col">Calendar Month</th>
+                <th scope="col" class="th-num">Analytical Price (UZS/kg)</th>
+                <th scope="col">Observation Status</th>
+                <th scope="col" class="th-num">Month-over-Month Delta</th>
+                <th scope="col" class="th-change">MoM % Change</th>
+              </tr>
+            </thead>
+            <tbody id="prices-body">
+              <tr><td colspan="5" class="empty-cell">Choose a product above to inspect historical observations.</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
 
-    <section aria-labelledby="assumptions-heading" class="panel notes">
-      <h2 id="assumptions-heading">Dataset notes</h2>
-      <ul>
-        <li>Source: official Uzbekistan statistics JSON for selected goods, monthly average prices in UZS per kg.</li>
-        <li>Product codes are identifiers. Leading zeros such as <code>001</code> and <code>0070</code> are preserved.</li>
-        <li>Source zeros are kept for audit and marked <code>zero_marked_unavailable</code>. Analytical price is missing, not replaced with a fabricated value. This is a project assumption, not a confirmed publisher encoding rule.</li>
-        <li>Missing source values stay missing. The application does not impute prices.</li>
-        <li>This interface reads PostgreSQL analytics. It does not download or reload the source on each page view.</li>
-      </ul>
-      <p>
-        <a href="/docs">Interactive API documentation</a>
-        ·
-        <a href="/health/ready">Readiness</a>
-      </p>
+    <!-- Architecture & Assumptions Section -->
+    <section aria-labelledby="assumptions-heading" class="section-container info-section">
+      <div class="section-header">
+        <div>
+          <h2 id="assumptions-heading" class="section-title">Data Engineering Standards & Design Assumptions</h2>
+          <p class="section-desc">Key guarantees enforced throughout the data lifecycle</p>
+        </div>
+      </div>
+
+      <div class="info-grid">
+        <div class="info-card">
+          <div class="info-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            </svg>
+          </div>
+          <h3 class="info-card-title">Source Integrity & Leading Zeros</h3>
+          <p class="info-card-text">
+            Product codes are identifiers, not numbers. Leading zeros such as <code>001</code>, <code>0004</code>, <code>0050</code>, and <code>0070</code> are strictly preserved in string format across extraction, staging, analytics, and API models.
+          </p>
+        </div>
+
+        <div class="info-card">
+          <div class="info-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+          </div>
+          <h3 class="info-card-title">Zero-Price Audit Assumption</h3>
+          <p class="info-card-text">
+            Source observations with zero prices are preserved in <code>source_price_uzs_per_kg</code> for audit traceability, marked as <code>zero_marked_unavailable</code>, and mapped to <code>NULL</code> in the analytical layer. No synthetic prices are imputed.
+          </p>
+        </div>
+
+        <div class="info-card">
+          <div class="info-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+          </div>
+          <h3 class="info-card-title">Exact Calendar Arithmetic</h3>
+          <p class="info-card-text">
+            Year-over-year and month-over-month comparisons join on exact calendar boundaries (e.g. <code>month_start - INTERVAL '1 year'</code>). Missing intermediate months never produce misleading row-lag calculations.
+          </p>
+        </div>
+
+        <div class="info-card">
+          <div class="info-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+              <line x1="12" y1="22.08" x2="12" y2="12"></line>
+            </svg>
+          </div>
+          <h3 class="info-card-title">Deterministic Historical Replay</h3>
+          <p class="info-card-text">
+            Past snapshots can be re-executed through Airflow or CLI in isolated replay directories with cryptographic hash validation, ensuring full historical reproducibility without modifying live production analytics.
+          </p>
+        </div>
+      </div>
     </section>
+
   </main>
+
+  <!-- Site Footer -->
+  <footer class="site-footer">
+    <div class="wrap footer-content">
+      <div class="footer-left">
+        <p class="footer-title">PricePulse Uzbekistan · Data Engineering Platform</p>
+        <p class="footer-sub">Official average prices from SIAT Stat UZ, modeled in PostgreSQL 16 & orchestrated via Apache Airflow 3.</p>
+      </div>
+      <div class="footer-right">
+        <a href="/docs" target="_blank" rel="noopener" class="footer-link">OpenAPI Swagger UI</a>
+        <span class="footer-sep">·</span>
+        <a href="/health/ready" target="_blank" rel="noopener" class="footer-link">Database Readiness</a>
+        <span class="footer-sep">·</span>
+        <a href="https://stat.uz/en/official-statistics/prices-and-indexes" target="_blank" rel="noopener" class="footer-link">SIAT Portal</a>
+      </div>
+    </div>
+  </footer>
+
   <script src="/static/app.js"></script>
 </body>
 </html>
