@@ -420,6 +420,83 @@ def _db_env_available() -> bool:
     return bool(os.getenv("API_DB_PASSWORD") or os.getenv("DB_PASSWORD"))
 
 
+def _seed_ci_database_if_empty():
+    """If testing against a fresh empty database (such as in CI), seed minimal test data."""
+    try:
+        import psycopg
+        from app.config import get_settings
+        settings = get_settings()
+        dev_user = os.getenv("DB_USER", "pricepulse_dev")
+        dev_password = os.getenv("DB_PASSWORD", settings.db_password)
+        with psycopg.connect(
+            host=settings.db_host,
+            port=settings.db_port,
+            dbname=settings.db_name,
+            user=dev_user,
+            password=dev_password,
+            connect_timeout=5,
+        ) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM analytics.dim_product")
+                if cur.fetchone()[0] > 0:
+                    return  # already populated, never overwrite!
+
+                cur.execute("""
+                    INSERT INTO audit.source_snapshot (
+                        snapshot_filename, fetched_at_utc, source_url, raw_sha256, semantic_sha256,
+                        semantic_hash_version, product_count, period_count, observation_count, source_metadata
+                    ) VALUES (
+                        'official_prices_test.json', CURRENT_TIMESTAMP, 'https://api.siat.stat.uz/test',
+                        'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+                        'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+                        2, 2, 3, 6, '[]'::jsonb
+                    );
+
+                    INSERT INTO analytics.dim_product (product_code, product_name_uz, product_name_ru, product_name_en, product_name_uz_cyrillic)
+                    VALUES 
+                        ('001', 'Guruch', 'Рис', 'Rice', 'Гуруч'),
+                        ('0050', 'Tarvuz', 'Арбуз', 'Watermelon', 'Тарвуз');
+
+                    INSERT INTO analytics.dim_month (month_key, month_start, calendar_year, quarter_number, month_number)
+                    VALUES
+                        (202409, '2024-09-01', 2024, 3, 9),
+                        (202509, '2025-09-01', 2025, 3, 9),
+                        (202609, '2026-09-01', 2026, 3, 9);
+
+                    INSERT INTO analytics.fact_monthly_official_price (
+                        product_key, month_key, source_price_uzs_per_kg, average_price_uzs_per_kg, price_status, source_fetched_at_utc, source_snapshot
+                    )
+                    SELECT p.product_key, m.month_key,
+                        CASE 
+                            WHEN p.product_code = '001' AND m.month_key = 202409 THEN 10000.00
+                            WHEN p.product_code = '001' AND m.month_key = 202509 THEN 12000.00
+                            WHEN p.product_code = '001' AND m.month_key = 202609 THEN 15000.00
+                            WHEN p.product_code = '0050' AND m.month_key = 202409 THEN 2000.00
+                            WHEN p.product_code = '0050' AND m.month_key = 202509 THEN 2500.00
+                            WHEN p.product_code = '0050' AND m.month_key = 202609 THEN 0.00
+                        END,
+                        CASE 
+                            WHEN p.product_code = '001' AND m.month_key = 202409 THEN 10000.00
+                            WHEN p.product_code = '001' AND m.month_key = 202509 THEN 12000.00
+                            WHEN p.product_code = '001' AND m.month_key = 202609 THEN 15000.00
+                            WHEN p.product_code = '0050' AND m.month_key = 202409 THEN 2000.00
+                            WHEN p.product_code = '0050' AND m.month_key = 202509 THEN 2500.00
+                            WHEN p.product_code = '0050' AND m.month_key = 202609 THEN NULL
+                        END,
+                        CASE 
+                            WHEN p.product_code = '0050' AND m.month_key = 202609 THEN 'zero_marked_unavailable'
+                            ELSE 'observed'
+                        END,
+                        CURRENT_TIMESTAMP, 'official_prices_test.json'
+                    FROM analytics.dim_product p
+                    CROSS JOIN analytics.dim_month m;
+                """)
+            conn.commit()
+    except Exception as exc:
+        import logging
+        logging.getLogger("test").warning("Could not auto-seed test DB: %s", exc)
+
+
 @pytest.mark.e2e
 class TestE2EApi:
     """Smoke tests against the actual PostgreSQL database.
@@ -432,6 +509,7 @@ class TestE2EApi:
     def skip_without_db(self):
         if not _db_env_available():
             pytest.skip("No database credentials in environment")
+        _seed_ci_database_if_empty()
 
     def test_overview_returns_real_data(self):
         client = TestClient(app)
