@@ -44,7 +44,7 @@ def main(input_path: Path | None = None) -> None:
     )
 
     print("=== DATASET OVERVIEW ===")
-    print(f"File: {DATA_FILE.name}")
+    print(f"File: {data_file.name}")
     print(f"Rows: {len(df):,}")
     print(f"Columns: {len(df.columns)}")
     print(f"Memory usage: {df.memory_usage(deep=True).sum():,} bytes")

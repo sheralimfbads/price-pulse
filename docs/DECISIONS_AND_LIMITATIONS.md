@@ -51,34 +51,37 @@ This document prevents an implementation choice from quietly turning into an une
 
 **Future option:** Add load-batch and source-observation history tables or a snapshot-diff process if revision history becomes a requirement.
 
-## D007 — Current year-over-year SQL uses `LAG(..., 12)`
+## D007 — Analytical views use calendar-based joins, not positional LAG
 
-**Decision:** Compare with twelve preceding rows per product.
+**Original approach:** Used `LAG(..., 12)` ordered by month.
+**Current decision:** Implemented in `sql/011_create_analytics_views.sql` using calendar interval arithmetic:
+```sql
+LEFT JOIN analytics.dim_month AS comparison_month
+    ON comparison_month.month_start = (current_month.month_start - INTERVAL '1 year')::DATE
+```
+**Why:** Guarantees that year-over-year comparisons match the exact calendar month 12 months earlier, even if an intervening month is missing or incomplete. Positional lag could silently compare against the wrong month if timeline gaps exist.
 
-**Assumption:** Each product has a complete, correctly ordered row for every month. The inspected dataset has 69 rows for each of 41 products.
+## D008 — Relational and index design
 
-**Limitation:** If missing months become possible, twelve preceding rows may not be the same calendar month last year. Match on an explicit date or join to `period - INTERVAL '1 year'` instead.
+**Decision:** Primary key on `fact_monthly_official_price (product_key, month_key)` covers lookups and foreign key constraints. Indexes on `(month_start)` and `(month_key)` enable efficient analytical views and partition window functions for rankings.
 
-## D008 — No additional period index yet
+## D009 — Orchestration with Apache Airflow 3 and standalone local runner
 
-**Evidence:** The product-history query used the primary-key index and ran quickly; filtering all products by period used a sequential scan and ran in under a millisecond in one local experiment.
+**Decision:** Maintain two ways to run the workflow:
+1. `scripts/run_pipeline.py`: Lightweight standalone runner for quick local dev / CI without container overhead.
+2. Apache Airflow 3 (`pricepulse_pipeline` and `pricepulse_snapshot_replay` DAGs): Operational scheduling with bounded retries, task-level lineage, and automated test execution.
 
-**Decision:** Keep the schema simple for the current 2,829-row table.
+## D010 — Runtime credentials and least-privilege database roles
 
-**Why:** Indexes take space and increase write costs. Revisit when representative queries or a larger dataset demonstrate a real benefit. Local timings are not a benchmark.
+**Decision:** All services read credentials from `.env` via environment variables. Two distinct PostgreSQL roles enforce least privilege:
+- `pricepulse_dev`: Read/write access on `staging`, `analytics`, and `audit` for pipeline ingestion and snapshot replay.
+- `pricepulse_api`: Read-only access (`SELECT`) on `analytics.*` and `audit.source_snapshot`; explicitly no access to `staging` or modification capabilities.
+Credentials are never committed or logged.
 
-## D009 — Local Python runner before Airflow
+## D011 — Automated idempotent migration runner
 
-**Decision:** Coordinate the scripts with a small sequential runner and stop on the first non-zero exit code.
+**Decision:** Implemented `scripts/migrate.py` tracked in `audit.schema_migration` using SHA-256 checksums. Supports both one-time DDL and repeatable view definitions (`CREATE OR REPLACE VIEW`). Runs automatically in Docker Compose before API and Airflow containers start.
 
-**Why:** The workflow's stages, dependencies, and failure behavior can be understood before adding a scheduler.
+## D012 — Read-only API and server-side analytical views
 
-**Limitation:** No scheduling, task retries, monitoring UI, alerting, or native backfills yet.
-
-## D010 — Credentials are supplied at runtime
-
-**Decision:** The current loader uses `getpass` for the local PostgreSQL password.
-
-**Why:** The password should not be embedded in code or committed.
-
-**Next step:** For non-interactive automation, use a documented secret mechanism such as environment variables injected at runtime or an Airflow connection/secret backend. Never commit the actual secret.
+**Decision:** FastAPI backend (`app/`) reads directly from PostgreSQL analytical views (`vw_monthly_price_changes`, `vw_year_over_year_price_changes`, `vw_yoy_price_change_rankings`). The API does not recompute statistics or download external data on HTTP requests. A lightweight dashboard is rendered via Jinja2 templates and vanilla JavaScript with SVG time-series charts. Missing prices are rendered as visual gaps, never fabricated.

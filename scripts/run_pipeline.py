@@ -31,7 +31,16 @@ PIPELINE_STEPS = [
     ),
     (
         "Run automated tests",
-        [PYTHON, "-m", "pytest", "-q", "-p", "no:cacheprovider"],
+        [
+            PYTHON,
+            "-m",
+            "pytest",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "-m",
+            "not integration and not e2e",
+        ],
     ),
     (
         "Load data into PostgreSQL",

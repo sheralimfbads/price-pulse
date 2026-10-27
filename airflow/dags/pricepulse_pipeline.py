@@ -15,11 +15,15 @@ PYTHON = sys.executable
 def run_script(script_name: str, *args: str) -> None:
     script_path = PROJECT_ROOT / "scripts" / script_name
 
-    subprocess.run(
+    completed = subprocess.run(
         [PYTHON, str(script_path), *args],
         cwd=PROJECT_ROOT,
-        check=True,
+        check=False,
     )
+    if completed.returncode != 0:
+        raise RuntimeError(
+            f"{script_name} failed with exit code {completed.returncode}"
+        )
 
 
 def require_database_environment() -> None:
@@ -47,21 +51,26 @@ def require_database_environment() -> None:
     max_active_runs=1,
     default_args={
         "retries": 1,
-        "retry_delay": timedelta(minutes=1),
+        "retry_delay": timedelta(minutes=2),
+        "execution_timeout": timedelta(minutes=30),
     },
     tags=["pricepulse", "data-engineering"],
     description="Official Uzbekistan price ingestion and analytics pipeline",
 )
 def pricepulse_pipeline():
 
-    @task
+    @task(
+        retries=3,
+        retry_delay=timedelta(minutes=2),
+        execution_timeout=timedelta(minutes=15),
+    )
     def extract_source() -> str:
         script_path = PROJECT_ROOT / "scripts" / "extract_source.py"
 
         result = subprocess.run(
             [PYTHON, str(script_path)],
             cwd=PROJECT_ROOT,
-            check=True,
+            check=False,
             capture_output=True,
             text=True,
         )
@@ -71,6 +80,11 @@ def pricepulse_pipeline():
 
         if result.stdout:
             print(result.stdout, end="")
+
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"extract_source.py failed with exit code {result.returncode}"
+            )
 
         paths = [
             line.partition("=")[2]
@@ -118,7 +132,7 @@ def pricepulse_pipeline():
 
     @task
     def run_tests() -> None:
-        subprocess.run(
+        completed = subprocess.run(
             [
                 PYTHON,
                 "-m",
@@ -126,10 +140,16 @@ def pricepulse_pipeline():
                 "-q",
                 "-p",
                 "no:cacheprovider",
+                "-m",
+                "not integration and not e2e",
             ],
             cwd=PROJECT_ROOT,
-            check=True,
+            check=False,
         )
+        if completed.returncode != 0:
+            raise RuntimeError(
+                f"pytest failed with exit code {completed.returncode}"
+            )
 
     @task
     def load_to_database() -> None:
@@ -138,7 +158,6 @@ def pricepulse_pipeline():
 
     snapshot_path = extract_source()
 
-    # Registration and transformations use the same extracted snapshot.
     history = register_snapshot_history(snapshot_path)
     normalized = normalize_source(snapshot_path)
 

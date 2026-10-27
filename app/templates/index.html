@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }} — Official monthly prices</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="wrap">
+      <p class="eyebrow">Uzbekistan official prices</p>
+      <h1>PricePulse</h1>
+      <p class="lede">
+        Monthly average prices for selected goods, in Uzbek soums per kilogram.
+        Data is loaded from the official statistics source, cleaned without
+        inventing missing values, and modeled in PostgreSQL.
+      </p>
+    </div>
+  </header>
+
+  <main id="main" class="wrap">
+    <section aria-labelledby="overview-heading" class="panel">
+      <h2 id="overview-heading">Overview</h2>
+      <p id="overview-status" class="status" role="status">Loading overview…</p>
+      <dl id="overview-metrics" class="metrics" hidden></dl>
+    </section>
+
+    <section aria-labelledby="movers-heading" class="panel">
+      <h2 id="movers-heading">Market movers</h2>
+      <p class="hint">
+        Year-over-year percentage change for the latest month that has
+        comparable prices. Rankings come from PostgreSQL, not from the browser.
+      </p>
+      <p id="movers-status" class="status" role="status">Loading rankings…</p>
+      <div class="split" hidden id="movers-tables">
+        <div>
+          <h3>Largest increases</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Rank</th>
+                  <th scope="col">Product</th>
+                  <th scope="col">Current</th>
+                  <th scope="col">Year earlier</th>
+                  <th scope="col">Change</th>
+                </tr>
+              </thead>
+              <tbody id="increases-body"></tbody>
+            </table>
+          </div>
+        </div>
+        <div>
+          <h3>Largest decreases</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Rank</th>
+                  <th scope="col">Product</th>
+                  <th scope="col">Current</th>
+                  <th scope="col">Year earlier</th>
+                  <th scope="col">Change</th>
+                </tr>
+              </thead>
+              <tbody id="decreases-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="explore-heading" class="panel">
+      <h2 id="explore-heading">Explore a product</h2>
+      <form id="product-form">
+        <div class="form-row">
+          <label for="product-select">Product</label>
+          <select id="product-select" name="product" required>
+            <option value="">Loading products…</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label for="from-month">From month</label>
+          <input id="from-month" name="from_month" type="month">
+        </div>
+        <div class="form-row">
+          <label for="to-month">To month</label>
+          <input id="to-month" name="to_month" type="month">
+        </div>
+        <button type="submit">Show prices</button>
+      </form>
+      <p id="product-status" class="status" role="status"></p>
+      <figure class="chart-card" id="chart-card" hidden>
+        <figcaption id="chart-caption">Analytical price over time</figcaption>
+        <svg id="price-chart" viewBox="0 0 720 260" role="img" aria-labelledby="chart-caption"></svg>
+        <p class="hint">Gaps are months with no analytical price. Lines are not interpolated across unavailable observations.</p>
+      </figure>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Month</th>
+              <th scope="col">Analytical price</th>
+              <th scope="col">Status</th>
+              <th scope="col">Month-over-month</th>
+              <th scope="col">Percent</th>
+            </tr>
+          </thead>
+          <tbody id="prices-body">
+            <tr><td colspan="5">Choose a product to load history.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section aria-labelledby="assumptions-heading" class="panel notes">
+      <h2 id="assumptions-heading">Dataset notes</h2>
+      <ul>
+        <li>Source: official Uzbekistan statistics JSON for selected goods, monthly average prices in UZS per kg.</li>
+        <li>Product codes are identifiers. Leading zeros such as <code>001</code> and <code>0070</code> are preserved.</li>
+        <li>Source zeros are kept for audit and marked <code>zero_marked_unavailable</code>. Analytical price is missing, not replaced with a fabricated value. This is a project assumption, not a confirmed publisher encoding rule.</li>
+        <li>Missing source values stay missing. The application does not impute prices.</li>
+        <li>This interface reads PostgreSQL analytics. It does not download or reload the source on each page view.</li>
+      </ul>
+      <p>
+        <a href="/docs">Interactive API documentation</a>
+        ·
+        <a href="/health/ready">Readiness</a>
+      </p>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -18,7 +18,10 @@ REPLAY_SCRIPT = PROJECT_ROOT / "scripts" / "replay_snapshot.py"
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
     catchup=False,
     max_active_runs=1,
-    default_args={"retries": 0},
+    default_args={
+        "retries": 0,
+        "execution_timeout": timedelta(minutes=30),
+    },
     tags=["pricepulse", "replay", "data-engineering"],
     description=(
         "Replay a registered historical snapshot in isolation, "
@@ -76,11 +79,16 @@ def pricepulse_snapshot_replay():
             dag_run.run_id,
         ]
 
-        subprocess.run(
+        completed = subprocess.run(
             command,
             cwd=PROJECT_ROOT,
-            check=True,
+            check=False,
         )
+        if completed.returncode != 0:
+            raise RuntimeError(
+                "replay_snapshot.py failed with exit code "
+                f"{completed.returncode}"
+            )
 
     replay_registered_snapshot()
 

@@ -13,6 +13,7 @@ RUN PYTHON_VERSION="$(python -c 'import sys; print(f"{sys.version_info.major}.{s
 
 COPY --chown=airflow:root scripts/ /opt/pricepulse/scripts/
 COPY --chown=airflow:root tests/ /opt/pricepulse/tests/
+COPY --chown=airflow:root pytest.ini /opt/pricepulse/pytest.ini
 
 USER root
 

@@ -18,6 +18,9 @@ services:
       - ./sql/008_create_snapshot_history.sql:/docker-entrypoint-initdb.d/30_create_snapshot_history.sql:ro
       - ./sql/009_version_semantic_hash.sql:/docker-entrypoint-initdb.d/40_version_semantic_hash.sql:ro
       - ./sql/010_create_snapshot_replay_runs.sql:/docker-entrypoint-initdb.d/50_create_snapshot_replay_runs.sql:ro
+      - ./sql/011_create_analytics_views.sql:/docker-entrypoint-initdb.d/60_create_analytics_views.sql:ro
+      - ./sql/012_price_change_rankings.sql:/docker-entrypoint-initdb.d/70_price_change_rankings.sql:ro
+      - ./sql/013_schema_migrations.sql:/docker-entrypoint-initdb.d/80_schema_migrations.sql:ro
       - ./docker/postgres/init/90_grant_app_privileges.sh:/docker-entrypoint-initdb.d/90_grant_app_privileges.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d pricepulse"]
@@ -26,12 +29,65 @@ services:
       retries: 10
       start_period: 5s
 
-  pipeline:
+  migrate:
     build: .
     user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
     depends_on:
       db:
         condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: pricepulse
+      POSTGRES_USER: postgres
+      POSTGRES_ADMIN_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?Set POSTGRES_ADMIN_PASSWORD in .env}
+      DB_USER: ${DB_USER:-pricepulse_dev}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      API_DB_USER: ${API_DB_USER:-pricepulse_api}
+      API_DB_PASSWORD: ${API_DB_PASSWORD:?Set API_DB_PASSWORD in .env}
+      PYTHONUNBUFFERED: "1"
+    command: ["python", "scripts/migrate.py"]
+    restart: "no"
+
+  api:
+    build: .
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: pricepulse
+      API_DB_USER: ${API_DB_USER:-pricepulse_api}
+      API_DB_PASSWORD: ${API_DB_PASSWORD:?Set API_DB_PASSWORD in .env}
+      PYTHONUNBUFFERED: "1"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=3)",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 8
+      start_period: 8s
+
+  pipeline:
+    build: .
+    profiles: ["ingest"]
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
       DB_HOST: db
       DB_PORT: "5432"
@@ -54,6 +110,7 @@ services:
     environment:
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      PYTHONPATH: /opt/pricepulse
       DB_HOST: db
       DB_PORT: "5432"
       DB_NAME: pricepulse
@@ -64,10 +121,14 @@ services:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/logs:/opt/airflow/logs
       - ./data:/opt/pricepulse/data
+      - ./scripts:/opt/pricepulse/scripts
+      - ./tests:/opt/pricepulse/tests
+      - ./pytest.ini:/opt/pricepulse/pytest.ini:ro
     depends_on:
       db:
         condition: service_healthy
-
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   pricepulse_db_data:

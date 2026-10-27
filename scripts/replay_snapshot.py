@@ -372,8 +372,17 @@ def main() -> None:
         )
 
         run_step(
-            "Run automated tests",
-            [python, "-m", "pytest", "-q"],
+            "Run automated unit tests",
+            [
+                python,
+                "-m",
+                "pytest",
+                "-q",
+                "-p",
+                "no:cacheprovider",
+                "-m",
+                "not integration and not e2e",
+            ],
         )
 
         # Enforce row counts and snapshot lineage before declaring success.

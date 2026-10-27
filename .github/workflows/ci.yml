@@ -10,6 +10,33 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_admin_password
+          POSTGRES_DB: pricepulse
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d pricepulse"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      POSTGRES_ADMIN_PASSWORD: ci_admin_password
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      DB_NAME: pricepulse
+      DB_USER: pricepulse_dev
+      DB_PASSWORD: ci_dev_password
+      API_DB_USER: pricepulse_api
+      API_DB_PASSWORD: ci_api_password
+      POSTGRES_USER: postgres
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -25,7 +52,23 @@ jobs:
         run: python -m pip install -r requirements.txt
 
       - name: Compile Python source
-        run: python -m compileall -q scripts tests
+        run: python -m compileall -q scripts tests app
 
-      - name: Run automated tests
-        run: python -m pytest -q
+      - name: Wait for PostgreSQL
+        run: |
+          until pg_isready -h localhost -p 5432 -U postgres; do
+            echo "Waiting for postgres…"
+            sleep 2
+          done
+
+      - name: Apply database schema and migrations
+        run: python scripts/migrate.py
+
+      - name: Run unit and API tests (no e2e marker)
+        run: python -m pytest -q -m "not e2e"
+
+      - name: Run e2e tests against CI database
+        run: python -m pytest -q -m e2e
+
+      - name: Validate Docker Compose configuration
+        run: docker compose config --quiet
