@@ -50,6 +50,16 @@ function initTheme() {
 }
 
 // --- Formatting Helpers ---
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[character]);
+}
+
 function formatPrice(value) {
   if (value === null || value === undefined || value === "") return null;
   const num = Number(value);
@@ -113,6 +123,12 @@ async function fetchJson(url) {
 async function loadOverview() {
   try {
     const data = await fetchJson("/api/v1/overview");
+    const timelineRange = data.earliest_month && data.latest_month
+      ? `${escapeHtml(formatMonth(data.earliest_month))} – ${escapeHtml(formatMonth(data.latest_month))}`
+      : "No observations";
+    const snapshotName = data.latest_source_snapshot
+      ? escapeHtml(data.latest_source_snapshot)
+      : "No loaded snapshot";
     overviewStatus.hidden = true;
     overviewMetrics.hidden = false;
 
@@ -129,10 +145,10 @@ async function loadOverview() {
             </svg>
           </div>
         </div>
-        <div class="kpi-value">${formatMonth(data.latest_month)}</div>
+        <div class="kpi-value">${data.latest_month ? escapeHtml(formatMonth(data.latest_month)) : "No data"}</div>
         <div class="kpi-footer">
-          <span class="kpi-badge badge-emerald">69 Months</span>
-          <span>Jan 2021 – Sep 2026</span>
+          <span class="kpi-badge badge-emerald">${Number(data.month_count).toLocaleString()} Months</span>
+          <span>${timelineRange}</span>
         </div>
       </div>
 
@@ -172,7 +188,7 @@ async function loadOverview() {
 
       <div class="kpi-card">
         <div class="kpi-header">
-          <span class="kpi-label">Source Snapshot Lineage</span>
+          <span class="kpi-label">Loaded Snapshot Lineage</span>
           <div class="kpi-icon-wrap">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
@@ -182,8 +198,8 @@ async function loadOverview() {
           </div>
         </div>
         <div class="kpi-value" style="font-size: 1.15rem; font-weight: 600;">
-          <span class="snapshot-pill" title="${data.latest_source_snapshot || ''}">
-            ${data.latest_source_snapshot || "official_prices_latest.json"}
+          <span class="snapshot-pill" title="${snapshotName}">
+            ${snapshotName}
           </span>
         </div>
         <div class="kpi-footer">
@@ -205,12 +221,12 @@ function moverRow(item) {
   const rankClass = item.rank === 1 ? "rank-1" : "";
 
   return `
-    <tr data-code="${item.product_code}" title="Click to inspect ${item.product_name_en} chart">
+    <tr data-code="${escapeHtml(item.product_code)}" title="Click to inspect ${escapeHtml(item.product_name_en || item.product_code)} chart">
       <td class="th-rank"><span class="rank-badge ${rankClass}">#${item.rank}</span></td>
       <td>
         <div class="commodity-cell">
-          <span class="commodity-name">${item.product_name_en || item.product_code}</span>
-          <span class="commodity-code-pill">CODE: ${item.product_code}</span>
+          <span class="commodity-name">${escapeHtml(item.product_name_en || item.product_code)}</span>
+              <span class="commodity-code-pill">CODE: ${escapeHtml(item.product_code)}</span>
         </div>
       </td>
       <td class="price-cell">${formatPrice(item.current_price_uzs_per_kg) || "—"}</td>
@@ -269,7 +285,7 @@ async function loadProducts() {
 
     productSelect.innerHTML = data.items.map((p) => {
       const label = p.product_name_en ? `${p.product_name_en} (${p.product_code})` : p.product_code;
-      return `<option value="${p.product_code}">${label}</option>`;
+      return `<option value="${escapeHtml(p.product_code)}">${escapeHtml(label)}</option>`;
     }).join("");
 
     // Auto-select first product (Rice 001)
@@ -303,7 +319,7 @@ function statusBadge(status) {
   if (status === "zero_marked_unavailable") {
     return `<span class="status-tag status-tag-unavailable">▲ Source 0 (Unavailable)</span>`;
   }
-  return `<span class="status-tag">${status || "—"}</span>`;
+  return `<span class="status-tag">${escapeHtml(status || "—")}</span>`;
 }
 
 // --- Interactive High-End SVG Chart ---
@@ -372,7 +388,7 @@ function drawInteractiveChart(items) {
       svgHtml += `
         <line x1="${xPos}" y1="${height - pad.bottom}" x2="${xPos}" y2="${height - pad.bottom + 6}" stroke="var(--border-subtle)" stroke-width="1" />
         <text x="${xPos}" y="${height - pad.bottom + 22}" fill="var(--text-muted)" font-size="11" text-anchor="middle" font-family="'JetBrains Mono', monospace">
-          ${formatMonth(p.month)}
+          ${escapeHtml(formatMonth(p.month))}
         </text>
       `;
     }
@@ -492,7 +508,7 @@ function drawInteractiveChart(items) {
     const priceTxt = closest.price !== null ? formatPrice(closest.price) : "Unavailable (Source Zero)";
 
     chartTooltip.innerHTML = `
-      <div style="font-weight: 700; color: var(--text-primary); margin-bottom: 0.2rem;">${formatMonth(closest.month)}</div>
+      <div style="font-weight: 700; color: var(--text-primary); margin-bottom: 0.2rem;">${escapeHtml(formatMonth(closest.month))}</div>
       <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.05rem; font-weight: 700; color: var(--accent-cyan);">${priceTxt}</div>
       <div style="display: flex; gap: 0.6rem; align-items: center; margin-top: 0.25rem; font-size: 0.76rem;">
         <span style="color: ${Number(closest.changePercent) >= 0 ? 'var(--gain-color)' : 'var(--loss-color)'}; font-weight: 700;">MoM: ${changeTxt}</span>
@@ -547,7 +563,7 @@ async function loadPrices(productCode, fromMonth = "", toMonth = "") {
 
       return `
         <tr>
-          <td style="font-family: 'JetBrains Mono', monospace; font-weight: 600;">${formatMonth(item.month_start)}</td>
+          <td style="font-family: 'JetBrains Mono', monospace; font-weight: 600;">${escapeHtml(formatMonth(item.month_start))}</td>
           <td class="price-cell" style="font-weight: 700; color: ${isMissing ? 'var(--warning-color)' : 'var(--text-primary)'};">
             ${isMissing ? 'Unavailable' : formatPrice(item.current_price_uzs_per_kg)}
           </td>
@@ -567,7 +583,7 @@ async function loadPrices(productCode, fromMonth = "", toMonth = "") {
     // Draw interactive SVG Chart
     drawInteractiveChart(data.items);
   } catch (error) {
-    pricesBody.innerHTML = `<tr><td colspan="5" class="empty-cell">Error loading history: ${error.message}</td></tr>`;
+    pricesBody.innerHTML = `<tr><td colspan="5" class="empty-cell">Error loading history: ${escapeHtml(error.message)}</td></tr>`;
     chartCard.hidden = true;
     productStatus.textContent = "Load error";
     productStatus.className = "status-pill status-error";

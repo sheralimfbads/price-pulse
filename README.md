@@ -16,6 +16,7 @@ All components are containerized, reproducible, orchestrated via Apache Airflow 
 - **Cryptographic Lineage & Snapshot Tracking:** Computes both physical file SHA-256 and canonicalized logical semantic SHA-256 (v2) hashes to guarantee snapshot uniqueness and dataset integrity in `audit.source_snapshot`.
 - **Deterministic Historical Snapshot Replay:** Enables historical audits by reproducing normalized and analytical datasets in isolated directories (`data/processed/replays/...`) without mutating live production tables.
 - **Dimensional Analytics Model:** Enforces a star schema (`analytics.dim_product`, `analytics.dim_month`, `analytics.fact_monthly_official_price`) with transactional loads, constraint checks, and foreign-key integrity.
+- **Latest-Snapshot Reconciliation:** Each complete, validated source snapshot becomes the live analytical state. Rows omitted by a newer snapshot are removed atomically; immutable raw snapshots and replay records retain the audit trail.
 - **Calendar-Based Analytics Views:** Precomputes month-over-month (MoM) and year-over-year (YoY) price trends using calendar interval joins rather than naive row-position lags. Ranks YoY percentage changes deterministically.
 - **FastAPI Read-Only Backend:** Exposes typed, OpenAPI-documented REST endpoints with pagination, query validation, and least-privilege database role isolation (`pricepulse_api`).
 - **Interactive Browser Dashboard:** Provides an accessible UI with summary metrics, top market movers, product exploration, and pure SVG time-series charts with honest gap handling for unavailable months.
@@ -35,7 +36,8 @@ All components are containerized, reproducible, orchestrated via Apache Airflow 
 
 1. **Product Code Fidelity:** Product identifiers such as `001`, `0004`, `0050`, and `0070` are treated as alphanumeric strings. Leading zeros are strictly preserved across all ingestion, database, and API layers.
 2. **Calendar Continuity:** Monthly comparisons join on calendar dates (`month_start - INTERVAL '1 year'`), ensuring timeline gaps never cause misleading comparisons across non-adjacent periods.
-3. **Source-Zero Assumption:** Exactly 6 records in the inspected dataset report a price of `0.00` (seasonal summer fruits such as watermelon and melon in early spring). The pipeline preserves original source values in `source_price_uzs_per_kg`, sets the analytical price to `NULL`, and assigns `price_status = 'zero_marked_unavailable'`. This is a documented **project assumption**, not an unverified assertion about the publisher's internal encoding. Missing prices are never silently coerced to zero or artificially imputed.
+3. **Source-Zero Assumption:** In the inspected baseline, 6 records report a price of `0.00`. The pipeline preserves original source values in `source_price_uzs_per_kg`, sets the analytical price to `NULL`, and assigns `price_status = 'zero_marked_unavailable'`. This is a documented **project assumption**, not a confirmed publisher encoding rule; verify it with authoritative source documentation before relying on zero handling for consequential analysis. Missing prices are never silently coerced to zero or imputed.
+4. **Current-State Semantics:** The latest successfully validated snapshot is authoritative for the live staging and analytics tables. Historical raw snapshots and replay logs are retained, but historical source values are not versioned in the live fact table.
 
 ---
 
@@ -237,7 +239,7 @@ Replay behavior:
 
 ## 9. Testing & Quality Assurance
 
-The repository includes a comprehensive 62-test automated suite:
+Tests are divided into unit/API tests, database integration tests, e2e checks, and Airflow DAG tests. Test totals can change as coverage grows; use pytest's reported totals rather than a hard-coded count.
 
 ### Run Local Unit, Mock, and Live Database E2E Tests
 ```bash
@@ -245,7 +247,7 @@ source .venv/bin/activate
 set -a && source .env && set +a
 pytest -v
 ```
-*(Executes 50 tests: 31 API unit/integration/e2e tests, 11 snapshot replay tests, 5 cleaning tests, and 2 pipeline tests).*
+*(The selected tests and any environment-dependent skips are reported by pytest.)*
 
 ### Run Airflow 3 Container DAG Tests
 ```bash

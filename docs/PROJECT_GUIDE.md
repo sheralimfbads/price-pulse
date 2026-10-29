@@ -180,11 +180,11 @@ The dimensional model reduces repetition of descriptive product/calendar attribu
 
 ## 11. Python loader and transaction
 
-`scripts/load_to_postgres.py` uses Psycopg 3. It streams the analytical CSV with PostgreSQL `COPY` into a temporary table, rejects duplicate product-month keys in the input, and uses upserts to update staging, dimensions, and facts.
+`scripts/load_to_postgres.py` uses Psycopg 3. It streams the analytical CSV with PostgreSQL `COPY` into a temporary table, rejects duplicate product-month keys, and checks that normalization produced the registered product-by-month grid. The latest accepted snapshot is authoritative: the loader upserts included rows and removes omitted observations and orphaned dimensions.
 
-The operations run within a transaction. If an error escapes before commit, the transaction rolls back rather than leaving a partially updated set of tables. The loader requests the database password at runtime instead of embedding a credential in source code.
+The loader serializes concurrent runs, rejects snapshots older than the current live snapshot, and applies reconciliation within one transaction. If an error escapes before commit, the transaction rolls back rather than leaving a partially updated set of tables. Raw snapshots and their registry entries preserve replay/audit evidence; current facts do not preserve prior value versions.
 
-The loader is repeatable with respect to final counts, but an upsert may rewrite unchanged rows. It also does not delete old product-month facts when a later snapshot omits a row. Those behaviors are acceptable for the initial exercise but should be considered in a production design.
+The loader requests the database password at runtime instead of embedding a credential in source code. Snapshot registry count checks catch partial normalization, but they cannot prove that the publisher's response itself is complete.
 
 ## 12. Local pipeline runner
 

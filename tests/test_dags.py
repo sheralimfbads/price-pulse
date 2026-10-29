@@ -88,7 +88,6 @@ class TestPipelineDag:
             "normalize_source",
             "audit_data",
             "clean_prices",
-            "run_tests",
             "load_to_database",
         }
         missing = expected - task_ids
@@ -104,11 +103,11 @@ class TestPipelineDag:
     def test_max_active_runs(self):
         assert self.dag.max_active_runs == 1
 
-    def test_load_depends_on_history_and_tests(self):
-        """load_to_database must not run before both history and tests succeed."""
+    def test_load_depends_on_clean_data_and_snapshot_history(self):
+        """Only validated data with registered lineage may reach the loader."""
         load_task = self.dag.get_task("load_to_database")
         upstream_ids = {t.task_id for t in load_task.upstream_list}
-        assert "run_tests" in upstream_ids
+        assert "clean_prices" in upstream_ids
         assert "register_snapshot_history" in upstream_ids
 
 

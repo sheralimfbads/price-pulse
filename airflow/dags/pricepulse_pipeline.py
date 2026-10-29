@@ -131,27 +131,6 @@ def pricepulse_pipeline():
         run_script("clean_prices.py")
 
     @task
-    def run_tests() -> None:
-        completed = subprocess.run(
-            [
-                PYTHON,
-                "-m",
-                "pytest",
-                "-q",
-                "-p",
-                "no:cacheprovider",
-                "-m",
-                "not integration and not e2e",
-            ],
-            cwd=PROJECT_ROOT,
-            check=False,
-        )
-        if completed.returncode != 0:
-            raise RuntimeError(
-                f"pytest failed with exit code {completed.returncode}"
-            )
-
-    @task
     def load_to_database() -> None:
         require_database_environment()
         run_script("load_to_postgres.py")
@@ -163,10 +142,9 @@ def pricepulse_pipeline():
 
     audited = audit_data()
     cleaned = clean_prices()
-    tests = run_tests()
     load = load_to_database()
 
-    normalized >> audited >> cleaned >> tests >> load
+    normalized >> audited >> cleaned >> load
     history >> load
 
 

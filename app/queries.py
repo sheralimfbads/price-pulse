@@ -1,7 +1,9 @@
 
 OVERVIEW_SQL = """
 SELECT
+    (SELECT MIN(month_start) FROM analytics.dim_month) AS earliest_month,
     (SELECT MAX(month_start) FROM analytics.dim_month) AS latest_month,
+    (SELECT COUNT(*) FROM analytics.dim_month) AS month_count,
     (SELECT COUNT(*) FROM analytics.dim_product) AS product_count,
     (
         SELECT COUNT(*)
@@ -18,15 +20,15 @@ SELECT
         FROM analytics.fact_monthly_official_price
     ) AS total_observations,
     (
-        SELECT snapshot_filename
-        FROM audit.source_snapshot
-        ORDER BY fetched_at_utc DESC, snapshot_filename DESC
+        SELECT source_snapshot
+        FROM analytics.fact_monthly_official_price
+        ORDER BY source_fetched_at_utc DESC, source_snapshot DESC
         LIMIT 1
     ) AS latest_source_snapshot,
     (
-        SELECT fetched_at_utc
-        FROM audit.source_snapshot
-        ORDER BY fetched_at_utc DESC, snapshot_filename DESC
+        SELECT source_fetched_at_utc
+        FROM analytics.fact_monthly_official_price
+        ORDER BY source_fetched_at_utc DESC, source_snapshot DESC
         LIMIT 1
     ) AS latest_source_fetched_at_utc
 """

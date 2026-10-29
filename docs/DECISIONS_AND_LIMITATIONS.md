@@ -38,18 +38,17 @@ This document prevents an implementation choice from quietly turning into an une
 
 **Why:** Staging simplifies ingestion and reconciliation; dimensions separate descriptive attributes from measurements and allow consistent analytical joins.
 
-## D006 — Upsert current product-month values
+## D006 — Reconcile live tables to the latest complete snapshot
 
-**Decision:** Use primary keys and `ON CONFLICT` upserts to make the local loader repeatable without creating duplicate product-month facts.
+**Decision:** Treat each registered, count-validated source snapshot as authoritative for the live staging and analytics tables. The loader checks that normalization produced the registered product-by-month grid, upserts included observations, and deletes omitted observations in the same transaction. Loaders are serialized, and snapshots older than the currently loaded snapshot are rejected.
 
 **Limitations:**
 
-- Upserts can rewrite rows even when values have not changed.
-- When the source revises an old price, the prior value is overwritten in the current fact table.
-- If a product-month row disappears from a future source snapshot, this loader does not automatically delete the old row.
-- Raw snapshots preserve some evidence of prior versions on the local machine, but the database does not yet model source revisions.
+- A source correction overwrites the current value; the live fact table is not a bitemporal/versioned history.
+- Raw snapshots and the snapshot registry preserve evidence needed for replay, but retainment of raw files must be backed up and managed operationally.
+- Grid checks catch truncated or incomplete normalization output, but cannot prove the source publisher itself returned a complete dataset; missing source fields are retained as explicit missing observations, and the source contract still needs monitoring.
 
-**Future option:** Add load-batch and source-observation history tables or a snapshot-diff process if revision history becomes a requirement.
+**Future option:** Add versioned source observations if users need to compare what the publisher reported across snapshot dates.
 
 ## D007 — Analytical views use calendar-based joins, not positional LAG
 

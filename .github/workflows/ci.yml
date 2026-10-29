@@ -36,6 +36,7 @@ jobs:
       API_DB_USER: pricepulse_api
       API_DB_PASSWORD: ci_api_password
       POSTGRES_USER: postgres
+      PRICEPULSE_TEST_DB_NAME: pricepulse_loader_test
 
     steps:
       - name: Check out repository
@@ -64,11 +65,33 @@ jobs:
       - name: Apply database schema and migrations
         run: python scripts/migrate.py
 
-      - name: Run unit and API tests (no e2e marker)
+      - name: Create isolated loader integration database
+        run: createdb -h localhost -U postgres "$PRICEPULSE_TEST_DB_NAME"
+        env:
+          PGPASSWORD: ci_admin_password
+
+      - name: Apply loader integration schema
+        run: python scripts/migrate.py
+        env:
+          DB_NAME: pricepulse_loader_test
+
+      - name: Run unit/API and loader integration tests (no e2e marker)
         run: python -m pytest -q -m "not e2e"
 
       - name: Run e2e tests against CI database
         run: python -m pytest -q -m e2e
+
+      - name: Build Airflow test image
+        run: docker build -f airflow/Dockerfile -t pricepulse-airflow-test .
+
+      - name: Run Airflow DAG tests
+        run: |
+          docker run --rm \
+            -e PYTHONPATH=/opt/pricepulse \
+            -v "$GITHUB_WORKSPACE/airflow/dags:/opt/airflow/dags:ro" \
+            --entrypoint bash \
+            pricepulse-airflow-test \
+            -c "airflow db migrate && pytest /opt/pricepulse/tests/test_dags.py -q -p no:cacheprovider"
 
       - name: Validate Docker Compose configuration
         run: docker compose config --quiet

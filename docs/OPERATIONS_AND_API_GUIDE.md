@@ -109,7 +109,7 @@ The API is strictly read-only and served on `http://127.0.0.1:8000`.
 | `GET` | `/docs` | OpenAPI / Swagger interactive documentation |
 | `GET` | `/health/live` | Liveness probe: returns `{"status": "ok"}` |
 | `GET` | `/health/ready` | Readiness probe: verifies DB connectivity and analytical views |
-| `GET` | `/api/v1/overview` | Dataset summary: counts, latest month, latest snapshot |
+| `GET` | `/api/v1/overview` | Dataset summary: observation counts, month range/count, and snapshot currently loaded into analytics |
 | `GET` | `/api/v1/products` | Paginated product list with search (`?q=`, `?limit=`, `?offset=`) |
 | `GET` | `/api/v1/products/{code}/prices` | Monthly price history with calendar month-over-month changes |
 | `GET` | `/api/v1/analytics/latest-movers` | Top YoY percentage price increases and decreases for latest month |
@@ -119,7 +119,7 @@ The API is strictly read-only and served on `http://127.0.0.1:8000`.
 ## 5. Airflow Orchestration
 
 Airflow 3 operates in standalone mode:
-- **`pricepulse_pipeline`**: Scheduled monthly (`0 6 20 * *`) to extract official data, register snapshot history, normalize, audit, clean, test, and load to PostgreSQL.
+- **`pricepulse_pipeline`**: Scheduled monthly (`0 6 20 * *`) to extract official data, register snapshot history, normalize, audit, clean, and reconcile the latest snapshot to PostgreSQL. Unit and integration tests run in CI rather than as part of routine ingestion.
 - **`pricepulse_snapshot_replay`**: Manual DAG triggered with a JSON configuration:
   ```json
   {"snapshot_filename": "official_prices_20261020T105154Z.json"}
@@ -142,6 +142,8 @@ set -a && source .env && set +a
 pytest -m e2e -v
 ```
 
+The loader reconciliation integration test runs only when `PRICEPULSE_TEST_DB_NAME` points to a dedicated disposable database that has been migrated. It truncates its tables to verify snapshot replacement, so never point it at a development or production database. CI creates and migrates this database automatically.
+
 ### Run Airflow DAG Structure Tests Inside Container
 ```bash
 docker compose exec airflow pytest /opt/pricepulse/tests/test_dags.py -v -p no:cacheprovider
@@ -151,4 +153,3 @@ docker compose exec airflow pytest /opt/pricepulse/tests/test_dags.py -v -p no:c
 ```bash
 python scripts/run_pipeline.py
 ```
-

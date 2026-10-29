@@ -78,6 +78,48 @@ DO UPDATE SET
     price_status = EXCLUDED.price_status
 """
 
+STAGE_DELETE_MISSING_SQL = """
+DELETE FROM staging.official_price_observations AS old_observation
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM pricepulse_import AS incoming
+    WHERE incoming.product_code = old_observation.product_code
+      AND incoming.period = old_observation.period
+)
+"""
+
+FACT_DELETE_MISSING_SQL = """
+DELETE FROM analytics.fact_monthly_official_price AS fact_row
+USING analytics.dim_product AS product_dim,
+      analytics.dim_month AS month_dim
+WHERE fact_row.product_key = product_dim.product_key
+  AND fact_row.month_key = month_dim.month_key
+  AND NOT EXISTS (
+      SELECT 1
+      FROM staging.official_price_observations AS observation
+      WHERE observation.product_code = product_dim.product_code
+        AND observation.period = month_dim.month_start
+  )
+"""
+
+PRODUCT_DELETE_ORPHANS_SQL = """
+DELETE FROM analytics.dim_product AS product_dim
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM staging.official_price_observations AS observation
+    WHERE observation.product_code = product_dim.product_code
+)
+"""
+
+MONTH_DELETE_ORPHANS_SQL = """
+DELETE FROM analytics.dim_month AS month_dim
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM staging.official_price_observations AS observation
+    WHERE observation.period = month_dim.month_start
+)
+"""
+
 PRODUCT_UPSERT_SQL = """
 INSERT INTO analytics.dim_product (
     product_code,
@@ -179,6 +221,11 @@ def load_data() -> dict:
         password=password,
     ) as conn:
         with conn.cursor() as cur:
+            cur.execute(
+                "SELECT pg_advisory_xact_lock("
+                "hashtextextended('pricepulse.snapshot_loader', 0))"
+            )
+
             # Temporary table: same columns and types as staging,
             # but without its indexes and primary-key constraint.
             cur.execute("""
@@ -208,6 +255,69 @@ def load_data() -> dict:
             if input_rows == 0:
                 raise ValueError("Input CSV contains no data rows")
 
+            cur.execute("""
+                SELECT
+                    COUNT(DISTINCT source_snapshot),
+                    COUNT(DISTINCT source_fetched_at_utc),
+                    MAX(source_fetched_at_utc),
+                    MAX(source_snapshot)
+                FROM pricepulse_import
+            """)
+            snapshot_count, fetched_at_count, fetched_at, snapshot_name = (
+                cur.fetchone()
+            )
+            if snapshot_count != 1 or fetched_at_count != 1:
+                raise ValueError(
+                    "Input must contain exactly one source snapshot "
+                    "and fetch timestamp"
+                )
+
+            cur.execute("""
+                SELECT product_count, period_count, observation_count
+                FROM audit.source_snapshot
+                WHERE snapshot_filename = %s
+            """, (snapshot_name,))
+            registered_counts = cur.fetchone()
+            if registered_counts is None:
+                raise ValueError(
+                    f"Source snapshot is not registered: {snapshot_name}"
+                )
+
+            cur.execute("""
+                SELECT
+                    COUNT(DISTINCT product_code),
+                    COUNT(DISTINCT period)
+                FROM pricepulse_import
+            """)
+            imported_product_count, imported_period_count = cur.fetchone()
+            expected_rows = registered_counts[0] * registered_counts[1]
+            if (
+                input_rows != expected_rows
+                or imported_product_count != registered_counts[0]
+                or imported_period_count != registered_counts[1]
+                or registered_counts[2] > expected_rows
+            ):
+                raise ValueError(
+                    "Imported product-month grid does not match the "
+                    f"registered snapshot dimensions: {snapshot_name}"
+                )
+
+            cur.execute("""
+                SELECT source_fetched_at_utc, source_snapshot
+                FROM staging.official_price_observations
+                ORDER BY source_fetched_at_utc DESC, source_snapshot DESC
+                LIMIT 1
+            """)
+            current_snapshot = cur.fetchone()
+            if current_snapshot and current_snapshot > (
+                fetched_at,
+                snapshot_name,
+            ):
+                raise ValueError(
+                    "Refusing to replace current analytics with an older "
+                    "source snapshot"
+                )
+
             # Check the key before the staging upsert.
             cur.execute("""
                 SELECT product_code, period, COUNT(*)
@@ -228,6 +338,19 @@ def load_data() -> dict:
             # 1. Upsert normalized observations into staging.
             cur.execute(STAGE_UPSERT_SQL)
             staging_affected = cur.rowcount
+
+            # Reconcile the snapshot's complete current-state contents.
+            cur.execute(STAGE_DELETE_MISSING_SQL)
+            staging_deleted = cur.rowcount
+
+            cur.execute(FACT_DELETE_MISSING_SQL)
+            facts_deleted = cur.rowcount
+
+            cur.execute(PRODUCT_DELETE_ORPHANS_SQL)
+            products_deleted = cur.rowcount
+
+            cur.execute(MONTH_DELETE_ORPHANS_SQL)
+            months_deleted = cur.rowcount
 
             # 2. Update dimensions.
             cur.execute(PRODUCT_UPSERT_SQL)
@@ -260,6 +383,22 @@ def load_data() -> dict:
                 fact_rows,
             ) = cur.fetchone()
 
+            if (
+                staging_rows,
+                product_rows,
+                month_rows,
+                fact_rows,
+            ) != (
+                input_rows,
+                imported_product_count,
+                imported_period_count,
+                input_rows,
+            ):
+                raise RuntimeError(
+                    "Loaded database counts do not match the validated "
+                    "source snapshot; transaction will be rolled back"
+                )
+
             cur.execute("""
                 SELECT price_status, COUNT(*)
                 FROM analytics.fact_monthly_official_price
@@ -272,9 +411,13 @@ def load_data() -> dict:
             results = {
                 "input_rows": input_rows,
                 "staging_affected": staging_affected,
+                "staging_deleted": staging_deleted,
                 "products_affected": products_affected,
+                "products_deleted": products_deleted,
                 "months_inserted": months_inserted,
+                "months_deleted": months_deleted,
                 "facts_affected": facts_affected,
+                "facts_deleted": facts_deleted,
                 "staging_rows": staging_rows,
                 "product_rows": product_rows,
                 "month_rows": month_rows,
@@ -292,9 +435,13 @@ def main() -> None:
     print("\n=== PRICEPULSE LOAD SUMMARY ===")
     print(f"CSV input rows: {results['input_rows']:,}")
     print(f"Staging rows affected: {results['staging_affected']:,}")
+    print(f"Stale staging rows removed: {results['staging_deleted']:,}")
     print(f"Product dimension rows affected: {results['products_affected']:,}")
+    print(f"Orphan product rows removed: {results['products_deleted']:,}")
     print(f"New month rows inserted: {results['months_inserted']:,}")
+    print(f"Orphan month rows removed: {results['months_deleted']:,}")
     print(f"Fact rows affected: {results['facts_affected']:,}")
+    print(f"Stale fact rows removed: {results['facts_deleted']:,}")
 
     print("\n=== FINAL ROW COUNTS ===")
     print(f"Staging: {results['staging_rows']:,}")

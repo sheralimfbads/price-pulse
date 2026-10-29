@@ -89,7 +89,9 @@ class TestHealthReady:
 
 class TestOverview:
     _ROW = {
-        "latest_month": None,
+        "earliest_month": "2021-01-01",
+        "latest_month": "2026-09-01",
+        "month_count": 69,
         "product_count": 41,
         "available_observations": 2823,
         "unavailable_observations": 6,
@@ -110,6 +112,13 @@ class TestOverview:
         assert resp.status_code == 200
         data = resp.json()
         assert data["product_count"] == 41
+
+    def test_returns_live_timeline_metadata(self):
+        client = TestClient(app)
+        resp = client.get("/api/v1/overview")
+        data = resp.json()
+        assert data["earliest_month"] == "2021-01-01"
+        assert data["month_count"] == 69
 
     def test_returns_observation_counts(self):
         client = TestClient(app)
@@ -600,4 +609,3 @@ class TestE2EApi:
 
         head_resp = client.head("/")
         assert head_resp.status_code == 200
-

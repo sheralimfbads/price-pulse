@@ -23,7 +23,7 @@ ranked AS (
             WHEN yoy_change_percent > 0
             THEN RANK() OVER (
                 PARTITION BY month_start
-                ORDER BY yoy_change_percent DESC, product_code
+                ORDER BY yoy_change_percent DESC
             )
         END AS increase_rank,
 
@@ -31,7 +31,7 @@ ranked AS (
             WHEN yoy_change_percent < 0
             THEN RANK() OVER (
                 PARTITION BY month_start
-                ORDER BY yoy_change_percent ASC, product_code
+                ORDER BY yoy_change_percent ASC
             )
         END AS decrease_rank
 

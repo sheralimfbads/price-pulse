@@ -43,7 +43,9 @@ class PaginatedPrices(BaseModel):
 
 
 class Overview(BaseModel):
+    earliest_month: date | None = None
     latest_month: date | None = None
+    month_count: int
     product_count: int
     available_observations: int
     unavailable_observations: int
